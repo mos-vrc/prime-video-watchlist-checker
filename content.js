@@ -24,6 +24,7 @@
 
   let scanning = false;
   let cancelRequested = false;
+  let panelHidden = false;
   let scanResults = [];
   let debugLog = [];
 
@@ -212,7 +213,10 @@
 
   function ensurePanel() {
     let panel = document.getElementById(PANEL_ID);
-    if (panel) return panel;
+    if (panel) {
+      panel.style.display = panelHidden ? 'none' : '';
+      return panel;
+    }
     panel = document.createElement('div');
     panel.id = PANEL_ID;
     panel.innerHTML = `
@@ -230,13 +234,31 @@
       <div class="pv-section pv-unknown"><h4>判定不能（0）</h4><ul></ul></div>
     `;
     document.body.appendChild(panel);
-    panel.querySelector('.pv-close').addEventListener('click', () => panel.remove());
+    panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
     panel.querySelector('.pv-cancel').addEventListener('click', () => { cancelRequested = true; });
     // 診断ログボタンは当面非表示（ユーザー要望）。保存機能自体は残してあり、必要になったら表示に戻す
     panel.querySelector('.pv-log').addEventListener('click', downloadDebugLog);
     setPanelRunning(false);
+    panel.style.display = panelHidden ? 'none' : '';
     return panel;
   }
+
+  // パネルを閉じる（隠す）。巡回中に閉じても巡回は裏で続き、結果はポップアップで見られる。
+  // 次にチェックを始めるとまた表示される。
+  function closePanel() {
+    panelHidden = true;
+    const panel = document.getElementById(PANEL_ID);
+    if (panel) panel.style.display = 'none';
+  }
+
+  // パネル以外の場所をクリックしたら閉じる。本物のクリックだけを対象にし、
+  // 巡回がカードへ送る合成イベント（isTrusted=false）では閉じない。
+  document.addEventListener('pointerdown', (e) => {
+    if (!e.isTrusted) return;
+    if (!document.getElementById(PANEL_ID)) return;
+    if (e.target && e.target.closest && e.target.closest('#' + PANEL_ID)) return;
+    closePanel();
+  }, true);
 
   // 巡回中だけボタン行（中止ボタン）を出す。終わったら行ごと消して情報を上に詰める
   function setPanelRunning(running) {
@@ -266,7 +288,8 @@
         const li = document.createElement('li');
         const a = document.createElement('a');
         a.href = r.href;
-        // 同じタブで作品ページへ遷移する（新しいタブは開かない）
+        // 同じタブで作品ページへ遷移する（新しいタブは開かない）。選択したらパネルも閉じる
+        a.addEventListener('click', () => closePanel());
         a.textContent = r.title;
         li.appendChild(a);
         const span = document.createElement('span');
@@ -374,6 +397,7 @@
     if (scanning) return { ok: true, already: true };
     scanning = true;
     cancelRequested = false;
+    panelHidden = false;
     scanResults = [];
     debugLog = [];
     ensurePanel();
