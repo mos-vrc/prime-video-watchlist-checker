@@ -491,7 +491,9 @@
   (async () => {
     try {
       const data = await chrome.storage.local.get('pvPendingScan');
-      if (data.pvPendingScan && Date.now() - data.pvPendingScan < 5 * 60 * 1000) {
+      const pending = data.pvPendingScan;
+      const pendingAt = typeof pending === 'number' ? pending : (pending && pending.at);
+      if (pendingAt && Date.now() - pendingAt < 5 * 60 * 1000) {
         await chrome.storage.local.remove('pvPendingScan');
         const deadline = Date.now() + 6000;
         while (Date.now() < deadline) {

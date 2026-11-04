@@ -20,6 +20,9 @@ document.getElementById('start').addEventListener('click', async () => {
 function render(data) {
   const scan = data.pvLastScan;
   const state = data.pvScanState;
+  if (data.pvNotice && Date.now() - data.pvNotice.at < 10 * 60 * 1000 && !noteEl.textContent) {
+    noteEl.textContent = data.pvNotice.text;
+  }
   resultsEl.innerHTML = '';
   if (state && state.running) {
     const p = document.createElement('p');
@@ -83,4 +86,4 @@ function render(data) {
   metaEl.textContent = '前回チェック: ' + new Date(scan.at).toLocaleString('ja-JP');
 }
 
-chrome.storage.local.get(['pvLastScan', 'pvScanState']).then(render).catch(() => {});
+chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice']).then(render).catch(() => {});
