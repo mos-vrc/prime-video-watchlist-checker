@@ -215,8 +215,8 @@
   // 映画の「再生」/ "Play"（弱い未視聴）は、強い文言が1つも無い場合にだけ使う。
   // ただし「今すぐ観る」等の判定不能な本命ボタンがある場合は弱い文言を捨てる
   // （予告編だけは本命ではないので、弱い文言をブロックしない）。
-  function findCtaElement(root) {
-    if (!root) return null;
+  function findCtaElements(root) {
+    if (!root) return [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     const candidates = [];
     let node = root;
@@ -231,24 +231,33 @@
     };
     consider(root);
     while ((node = walker.nextNode())) consider(node);
-    if (!candidates.length) return null;
+    if (!candidates.length) return [];
+    // 候補を内包する祖先要素は、内側の文言を拾っただけの可能性が高いので落とし、
+    // 一番深い要素だけを候補に残す（文言が子要素に分かれている場合は祖先が残る）。
+    const deepest = candidates.filter((c) => !candidates.some((o) => o !== c && c.el !== o.el && c.el.contains(o.el)));
     const isTrailer = (text) => /予告編/.test(text) || /\btrailer\b/i.test(text);
-    const hasBlocker = candidates.some((c) => c.cls.status === 'unknown' && !isTrailer(c.text));
-    const usable = hasBlocker ? candidates.filter((c) => !c.cls.weak) : candidates;
-    if (!usable.length) return null;
+    const hasBlocker = deepest.some((c) => c.cls.status === 'unknown' && !isTrailer(c.text));
+    const usable = hasBlocker ? deepest.filter((c) => !c.cls.weak) : deepest;
     usable.sort((a, b) => a.priority - b.priority || a.len - b.len);
-    return usable[0].el;
+    return usable;
+  }
+
+  function findCtaElement(root) {
+    const list = findCtaElements(root);
+    return list.length ? list[0].el : null;
   }
 
   function snapshotCtaElements() {
-    const set = new Set();
-    const el = findCtaElement(document.body);
-    if (el) set.add(el);
-    return set;
+    // 要素→文言の対応で覚える。ポータルのボタン要素が作品ごとに再利用され、
+    // 文言だけ差し替わる場合でも「変わった」と検出できるようにするため。
+    const map = new Map();
+    for (const c of findCtaElements(document.body)) map.set(c.el, c.text);
+    return map;
   }
 
-  // ホバー後にCTAを探す: 1) カード内 2) 同じ作品へのリンクを含むポータル 3) 新しく現れた要素
-  function findCtaFor(card, beforeSet) {
+  // ホバー後にCTAを探す: 1) カード内 2) 同じ作品へのリンクを含むポータル
+  // 2b) 作品リンクから遡って見つけるポータル 3) ホバー前から変わったCTA要素
+  function findCtaFor(card, beforeMap) {
     // 1) カード内（ホバーでカード自体が展開するタイプ）
     let el = findCtaElement(card.el);
     if (el) return { el, where: 'card' };
@@ -263,9 +272,38 @@
       if (el) return { el, where: 'portal' };
     }
 
-    // 3) ホバー前には無かったCTA要素（ポータルがリンクを持たないタイプ）
-    el = findCtaElement(document.body);
-    if (el && !beforeSet.has(el)) return { el, where: 'new-element' };
+    // 2b) ポータル内の作品リンクから外枠まで遡って探す。
+    // ポータルがアプリのルート要素の中など 2) のセレクタに合わない場所に出る
+    // 場合でも、リンクの作品IDで確実に結び付けられる（実例: 劇場版総集編など
+    // 一部の作品だけポータルの出方が違い、ボタン未検出になっていた）。
+    for (const a of document.querySelectorAll('a[href*="/detail/"]')) {
+      if (extractTitleId(a.href) !== card.id) continue;
+      if (card.el.contains(a) || (a.closest && a.closest('#' + PANEL_ID))) continue;
+      let portal = a;
+      for (let depth = 0; depth < 8 && portal.parentElement; depth++) {
+        const parent = portal.parentElement;
+        if (parent === document.body || parent.contains(card.el)) break;
+        const ids = new Set();
+        for (const x of parent.querySelectorAll('a[href*="/detail/"]')) {
+          const xid = extractTitleId(x.href);
+          if (xid) ids.add(xid);
+        }
+        if (ids.size > 1) break;
+        portal = parent;
+      }
+      el = findCtaElement(portal);
+      if (el) return { el, where: 'portal-link' };
+    }
+
+    // 3) ホバー前には無かったCTA要素、または文言が変わったCTA要素
+    // （ポータルが使い回され、前の作品のボタン要素が残っている場合への対策。
+    // 以前は「最善の1件」だけを見ていたため、残っていた要素に阻まれて
+    // 新しいボタンを見つけられないことがあった）
+    for (const c of findCtaElements(document.body)) {
+      if (!beforeMap.has(c.el) || beforeMap.get(c.el) !== c.text) {
+        return { el: c.el, where: 'new-element' };
+      }
+    }
 
     return null;
   }
