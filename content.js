@@ -15,12 +15,14 @@
 
   const PANEL_ID = 'pv-checker-panel';
   const HOVER_WAIT_MS = 2500;      // 1作品あたりホバーを待つ最大時間
-  const HOVER_POLL_MS = 120;
-  const NO_REACTION_MS = 1200;     // ホバーにDOMが全く反応しなければ、この時間で見切る
-  const BETWEEN_CARDS_MS = 120;    // 作品間の間隔
-  const SCROLL_WAIT_MS = 250;
+  const HOVER_POLL_MS = 50;
+  const NO_REACTION_MS = 800;      // ホバーにDOMが全く反応しなければ、この時間で見切る
+  const SETTLE_MS = 700;           // 反応はあったがDOMの変化がこの時間止まったら、ボタン無しと見切る
+  const SETTLE_MIN_MS = 900;       // ただしホバー開始からこの時間までは見切らない
+  const BETWEEN_CARDS_MS = 60;     // 作品間の間隔
+  const SCROLL_WAIT_MS = 150;
   const MAX_SCROLL_ROUNDS = 120;   // 無限スクロールの安全上限
-  const STABLE_ROUNDS_TO_STOP = 3; // 新規カードが出なくなってから止まるまでの回数
+  const STABLE_ROUNDS_TO_STOP = 2; // 新規カードが出なくなってから止まるまでの回数
 
   let scanning = false;
   let cancelRequested = false;
@@ -341,7 +343,7 @@
   async function checkCard(card) {
     const debug = { id: card.id, title: card.title, ctaText: '', foundIn: 'none', progressHint: null, snippet: '' };
     card.el.scrollIntoView({ block: 'center', behavior: 'instant' });
-    await wait(120);
+    await wait(60);
 
     const before = snapshotCtaElements();
     const hoverTargets = [card.el.querySelector('img'), card.el.querySelector('a'), card.el].filter(Boolean);
@@ -350,11 +352,13 @@
     // 一定時間たっても何も起きなければ、その作品はホバー詳細を持たないと見切って
     // フルに待ち続けずに次へ進む（高速化）。自分自身のパネルの変化は数えない。
     let domReactions = 0;
+    let lastReactionAt = 0;
     const observer = new MutationObserver((records) => {
       for (const r of records) {
         const t = r.target;
         if (t && t.closest && t.closest('#' + PANEL_ID)) continue;
         domReactions++;
+        lastReactionAt = Date.now();
       }
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
@@ -370,7 +374,11 @@
         dispatchHover(hoverTargets[0], true);
         found = findCtaFor(card, before);
         if (found) break;
-        if (domReactions === 0 && Date.now() - hoverStartedAt > NO_REACTION_MS) break;
+        const elapsed = Date.now() - hoverStartedAt;
+        if (domReactions === 0 && elapsed > NO_REACTION_MS) break;
+        // ホバーカードは出たがボタンが無く、DOMの変化も止まったなら、
+        // 最大時間まで待ち切らずに「ボタン無し」として次へ進む（高速化）
+        if (domReactions > 0 && elapsed > SETTLE_MIN_MS && Date.now() - lastReactionAt > SETTLE_MS) break;
         await wait(HOVER_POLL_MS);
       }
     } finally {
@@ -477,13 +485,19 @@
     return false;
   });
 
-  // タブを新規に開いた直後など、pending フラグが立っていたら自動開始する
+  // タブを新規に開いた直後など、pending フラグが立っていたら自動開始する。
+  // 初期描画は固定で待たず、最初のカードが見えるまでポーリングして
+  // 描画が終わり次第すぐ始める（速いときは速く、遅いときは待つ）。
   (async () => {
     try {
       const data = await chrome.storage.local.get('pvPendingScan');
       if (data.pvPendingScan && Date.now() - data.pvPendingScan < 5 * 60 * 1000) {
         await chrome.storage.local.remove('pvPendingScan');
-        await wait(1200); // ページの初期描画待ち
+        const deadline = Date.now() + 6000;
+        while (Date.now() < deadline) {
+          if (findCards().length > 0) break;
+          await wait(200);
+        }
         startScan();
       }
     } catch (e) { /* noop */ }

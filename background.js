@@ -9,13 +9,20 @@ async function findWatchlistTab() {
   return tabs.find((t) => t.url && t.url.startsWith(WATCHLIST_URL)) || null;
 }
 
-async function sendStartToTab(tabId, tries = 20) {
+async function sendStartToTab(tabId, tries = 8) {
   for (let i = 0; i < tries; i++) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: 'pv-scan-start' });
       if (res && res.ok) return true;
     } catch (e) {
-      // content script がまだ読み込まれていない場合は少し待って再試行
+      // content script が居ない/無効化されている場合は何度送っても届かない。
+      // アドオン更新直後の既存タブがこれで、ここで粘ると開始が最大10秒遅れるため、
+      // 即座に諦めてリロードでの自動開始に切り替える。
+      const msg = String(e && e.message ? e.message : e);
+      if (/Receiving end does not exist|Extension context invalidated|Could not establish connection/i.test(msg)) {
+        return false;
+      }
+      // それ以外の一時的な失敗（読み込み途中など）は少し待って再試行
     }
     await new Promise((r) => setTimeout(r, 500));
   }
