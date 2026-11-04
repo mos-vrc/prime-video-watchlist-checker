@@ -78,6 +78,7 @@ jobs:
           echo "ITEM=$ITEM" >> "$GITHUB_ENV"
           curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
             "https://chromewebstore.googleapis.com/v2/$ITEM:fetchStatus" | tee status.json | jq .
+          echo "::notice title=CWS fetchStatus::$(jq -c . status.json | sed 's/%/%25/g')"
           UPLOAD_STATE="$(jq -r '.lastAsyncUploadState // "NONE"' status.json)"
           if [ "$UPLOAD_STATE" = "IN_PROGRESS" ]; then
             echo "A previous upload is still being processed. Aborting."
@@ -103,6 +104,8 @@ jobs:
           done
           if [ "$STATE" != "SUCCEEDED" ]; then
             echo "Upload did not succeed (state: $STATE)."
+            echo "::error title=CWS upload response::$(jq -c . upload.json | sed 's/%/%25/g')"
+            echo "::error title=CWS status response::$(jq -c . status.json | sed 's/%/%25/g')"
             exit 1
           fi
 
