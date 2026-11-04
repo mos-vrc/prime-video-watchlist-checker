@@ -70,7 +70,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (pendingTabId != null && pendingTabId !== tabId) return;
     await chrome.storage.local.remove('pvPendingScan');
     await chrome.storage.local.set({
-      pvNotice: { at: Date.now(), text: 'ログイン画面が出たのでチェックを止めたよ。ログインしてから、もう一度チェックを押してね。' },
+      pvNotice: { at: Date.now(), text: chrome.i18n.getMessage('noticeSigninStopped') },
     });
   } catch (e) { /* noop */ }
 });

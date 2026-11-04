@@ -1,19 +1,28 @@
 // ポップアップ: チェック開始ボタン + 前回結果の表示
+// 表示文言は chrome.i18n（_locales）から取る。default_locale は ja で、
+// ブラウザの表示言語が英語なら en が使われる。
+const msg = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
+
 const noteEl = document.getElementById('note');
 const resultsEl = document.getElementById('results');
 const metaEl = document.getElementById('meta');
+const startBtn = document.getElementById('start');
 
-document.getElementById('start').addEventListener('click', async () => {
-  noteEl.textContent = 'ウォッチリストを開いて巡回を始めるよ…';
+document.documentElement.lang = chrome.i18n.getUILanguage();
+startBtn.textContent = msg('popupStartButton');
+document.getElementById('brand').textContent = '▶' + msg('appName');
+
+startBtn.addEventListener('click', async () => {
+  noteEl.textContent = msg('popupStarting');
   try {
     const res = await chrome.runtime.sendMessage({ type: 'pv-open-and-scan' });
     if (res && res.ok) {
-      noteEl.textContent = '巡回中はウォッチリストのタブに結果パネルが出るよ。終わったらまたこのポップアップを開くと一覧が見られるよ。';
+      noteEl.textContent = msg('popupStarted');
     } else {
-      noteEl.textContent = '開始できなかった: ' + ((res && res.error) || '不明なエラー');
+      noteEl.textContent = msg('popupStartFailed', [String((res && res.error) || msg('errorUnknown'))]);
     }
   } catch (e) {
-    noteEl.textContent = '開始できなかった: ' + e.message;
+    noteEl.textContent = msg('popupStartFailed', [e.message]);
   }
 });
 
@@ -27,31 +36,31 @@ function render(data) {
   if (state && state.running) {
     const p = document.createElement('p');
     p.className = 'empty';
-    p.textContent = 'いま巡回中… ウォッチリストのタブで進み具合が見られるよ。';
+    p.textContent = msg('popupScanning');
     resultsEl.appendChild(p);
   }
   if (!scan || !scan.results || scan.results.length === 0) {
     const p = document.createElement('p');
     p.className = 'empty';
-    p.textContent = 'まだ結果がないよ。「ウォッチリストをチェック」から始めてね。';
+    p.textContent = msg('popupNoResults');
     resultsEl.appendChild(p);
     return;
   }
   const groups = [
-    ['unwatched', '未視聴あり', ''],
-    ['resume', '視聴済み側・続きを観る', 'sub'],
-    ['unknown', '判定不能', 'sub'],
+    ['unwatched', 'headingUnwatched', ''],
+    ['resume', 'headingResume', 'sub'],
+    ['unknown', 'headingUnknown', 'sub'],
   ];
-  for (const [status, label, cls] of groups) {
+  for (const [status, labelKey, cls] of groups) {
     const items = scan.results.filter((r) => r.status === status);
     const h = document.createElement('h2');
     if (cls) h.className = cls;
-    h.textContent = `${label}（${items.length}）`;
+    h.textContent = msg(labelKey, [String(items.length)]);
     resultsEl.appendChild(h);
     if (!items.length) {
       const p = document.createElement('p');
       p.className = 'empty';
-      p.textContent = 'なし';
+      p.textContent = msg('emptyNone');
       resultsEl.appendChild(p);
       continue;
     }
@@ -77,13 +86,13 @@ function render(data) {
       li.appendChild(a);
       const span = document.createElement('span');
       span.className = 'cta';
-      span.textContent = r.ctaText || 'ボタン未検出';
+      span.textContent = r.ctaText || msg('ctaNotFound');
       li.appendChild(span);
       ul.appendChild(li);
     }
     resultsEl.appendChild(ul);
   }
-  metaEl.textContent = '前回チェック: ' + new Date(scan.at).toLocaleString('ja-JP');
+  metaEl.textContent = msg('popupLastCheck', [new Date(scan.at).toLocaleString(chrome.i18n.getUILanguage())]);
 }
 
 chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice']).then(render).catch(() => {});

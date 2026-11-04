@@ -7,6 +7,14 @@
 //   「エピソード○を再生」等 "エピソード○を再生"           -> 未視聴（新着エピソードあり候補）
 //   それ以外／ボタンが取れない                              -> 判定不能（診断ログに原文を残す）
 //
+// 英語UI（amazon.co.jp の英語表示など）向けの対応パターン（v1.1で追加。実ページ未検証の推定）:
+//   "Resume" / "Resume S3 E5" / "Continue Watching"          -> 視聴済み側
+//   "Play Episode 5" / "Play S3 E5" / "Play Season 3 …" / "Play" そのもの -> 未視聴
+//   "Watch Now" は「今すぐ観る」相当で判定不能、"Play Trailer" 等の予告編は対象外
+//
+// パネル等の表示文言は chrome.i18n（_locales）から取る。判定はページ側の表示言語に
+// 依存するため、日本語・英語両方のパターンを常に有効にしている。
+//
 // 結果はページ内パネルに表示し、chrome.storage.local にも保存して
 // 拡張ポップアップから「前回の結果」として見られるようにする。
 
@@ -55,6 +63,17 @@
     if (/エピソード\d+を再生/.test(compact)) {
       return { status: 'unwatched', ctaText: t }; // 未視聴
     }
+    // 英語UI向け（ページの表示言語が英語の場合）。予告編（Play Trailer 等）は
+    // どのパターンにも一致しないので自然に判定不能へ落ちる。
+    if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t)) {
+      return { status: 'resume', ctaText: t }; // 視聴済み側
+    }
+    if (/^play\b[^]*\bepisode\s*\d+/i.test(t)
+      || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
+      || /^play\s+season\s+\d+\b/i.test(t)
+      || /^play$/i.test(t)) {
+      return { status: 'unwatched', ctaText: t }; // 未視聴
+    }
     return { status: 'unknown', ctaText: t };
   }
 
@@ -63,7 +82,16 @@
     const t = normalizeText(text);
     if (!t || t.length > 40) return false;
     const compact = t.replace(/\s+/g, '');
-    return /の続きを観る/.test(compact) || /エピソード\d+を再生/.test(compact) || /を再生/.test(compact) || /今すぐ観る/.test(compact);
+    if (/の続きを観る/.test(compact) || /エピソード\d+を再生/.test(compact) || /を再生/.test(compact) || /今すぐ観る/.test(compact)) return true;
+    // 英語UI向け
+    return /^play$/i.test(t)
+      || /\bresume\b/i.test(t)
+      || /\bcontinue watching\b/i.test(t)
+      || /\bplay\b[^]*\bepisode\b/i.test(t)
+      || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
+      || /\bwatch now\b/i.test(t)
+      || /\bplay trailer\b/i.test(t)
+      || /\bwatch trailer\b/i.test(t);
   }
 
   // Node 環境（テスト）からも使えるように公開
@@ -73,6 +101,15 @@
   if (typeof document === 'undefined') return;
 
   // ---------- DOM ユーティリティ ----------
+
+  // 表示文言（chrome.i18n）。ユニットテスト等の chrome が無い環境ではキー名を返す
+  const msg = (key, subs) => {
+    try {
+      return (typeof chrome !== 'undefined' && chrome.i18n && chrome.i18n.getMessage(key, subs)) || key;
+    } catch (e) {
+      return key;
+    }
+  };
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -106,7 +143,7 @@
         normalizeText(img && img.alt) ||
         normalizeText(link.textContent) ||
         normalizeText(container.querySelector('[data-testid*="title" i], h2, h3')?.textContent) ||
-        '(タイトル不明)';
+        msg('titleUnknown');
       byId.set(id, {
         id,
         title,
@@ -230,17 +267,17 @@
     panel.id = PANEL_ID;
     panel.innerHTML = `
       <div class="pv-toprow">
-        <div class="pv-status">待機中</div>
+        <div class="pv-status">${msg('panelIdle')}</div>
         <button class="pv-close" type="button">×</button>
       </div>
       <div class="pv-actions">
-        <button class="pv-cancel" type="button">中止</button>
-        <button class="pv-log" type="button" style="display:none">診断ログを保存</button>
+        <button class="pv-cancel" type="button">${msg('panelCancel')}</button>
+        <button class="pv-log" type="button" style="display:none">${msg('panelSaveLog')}</button>
       </div>
-      <div class="pv-section pv-unwatched"><h4>未視聴あり（0）</h4><ul></ul></div>
-      <div class="pv-section pv-resume"><h4>視聴済み側・続きを観る（0）</h4><ul></ul></div>
-      <div class="pv-section pv-unknown"><h4>判定不能（0）</h4><ul></ul></div>
-      <div class="pv-brand">▶Amazon Prime Video 未視聴ウォッチリストチェッカー</div>
+      <div class="pv-section pv-unwatched"><h4>${msg('headingUnwatched', ['0'])}</h4><ul></ul></div>
+      <div class="pv-section pv-resume"><h4>${msg('headingResume', ['0'])}</h4><ul></ul></div>
+      <div class="pv-section pv-unknown"><h4>${msg('headingUnknown', ['0'])}</h4><ul></ul></div>
+      <div class="pv-brand">▶${msg('appName')}</div>
     `;
     document.body.appendChild(panel);
     panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
@@ -288,9 +325,9 @@
     const panel = ensurePanel();
     const groups = { unwatched: [], resume: [], unknown: [] };
     for (const r of scanResults) (groups[r.status] || groups.unknown).push(r);
-    const fill = (cls, items, fmt) => {
+    const fill = (cls, headingKey, items, fmt) => {
       const sec = panel.querySelector(cls);
-      sec.querySelector('h4').textContent = sec.querySelector('h4').textContent.replace(/（\d+）/, `（${items.length}）`);
+      sec.querySelector('h4').textContent = msg(headingKey, [String(items.length)]);
       const ul = sec.querySelector('ul');
       ul.innerHTML = '';
       for (const r of items) {
@@ -308,9 +345,9 @@
         ul.appendChild(li);
       }
     };
-    fill('.pv-unwatched', groups.unwatched, (r) => r.ctaText);
-    fill('.pv-resume', groups.resume, (r) => r.ctaText);
-    fill('.pv-unknown', groups.unknown, (r) => (r.ctaText ? 'ボタン: ' + r.ctaText : 'ボタン未検出'));
+    fill('.pv-unwatched', 'headingUnwatched', groups.unwatched, (r) => r.ctaText);
+    fill('.pv-resume', 'headingResume', groups.resume, (r) => r.ctaText);
+    fill('.pv-unknown', 'headingUnknown', groups.unknown, (r) => (r.ctaText ? msg('panelButtonPrefix', [r.ctaText]) : msg('ctaNotFound')));
   }
 
   function downloadDebugLog() {
@@ -422,7 +459,7 @@
 
     try {
       if (/signin|ap\/signin/i.test(location.href)) {
-        setStatus('サインイン画面にいるみたい。ログインしてからもう一度チェックしてね。');
+        setStatus(msg('statusSignin'));
         return { ok: false, reason: 'signin' };
       }
       const processed = new Set();
@@ -439,7 +476,7 @@
           for (const card of cards) {
             if (cancelRequested) break;
             processed.add(card.id);
-            setStatus(`巡回中… ${processed.size}件済み（いま: ${card.title}）`);
+            setStatus(msg('statusScanning', [String(processed.size), card.title]));
             const r = await checkCard(card);
             scanResults.push(r);
             renderResults();
@@ -456,12 +493,12 @@
 
       const unwatchedCount = scanResults.filter((r) => r.status === 'unwatched').length;
       if (cancelRequested) {
-        setStatus(`中止したよ。${scanResults.length}件チェック済み、未視聴あり ${unwatchedCount}件。`);
+        setStatus(msg('statusCancelled', [String(scanResults.length), String(unwatchedCount)]));
       } else if (scanResults.length === 0) {
-        setStatus('作品カードが見つからなかった。ログイン状態とウォッチリストの表示を確認してね。');
+        setStatus(msg('statusNoCards'));
         debugLog.push({ pageHtmlSnippet: (document.body.outerHTML || '').slice(0, 4000) });
       } else {
-        setStatus(`完了！ ${scanResults.length}件中、未視聴あり ${unwatchedCount}件。`);
+        setStatus(msg('statusDone', [String(scanResults.length), String(unwatchedCount)]));
       }
       await saveState({ pvScanState: { running: false, at: Date.now() } });
       return { ok: true, count: scanResults.length };
