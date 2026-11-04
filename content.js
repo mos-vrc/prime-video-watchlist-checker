@@ -266,8 +266,7 @@
         const li = document.createElement('li');
         const a = document.createElement('a');
         a.href = r.href;
-        a.target = '_blank';
-        a.rel = 'noopener';
+        // 同じタブで作品ページへ遷移する（新しいタブは開かない）
         a.textContent = r.title;
         li.appendChild(a);
         const span = document.createElement('span');

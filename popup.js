@@ -58,8 +58,17 @@ function render(data) {
       const a = document.createElement('a');
       a.href = r.href;
       a.textContent = r.title;
-      a.addEventListener('click', (ev) => {
+      a.addEventListener('click', async (ev) => {
         ev.preventDefault();
+        // 今開いているタブをそのまま作品ページへ遷移させる（新しいタブは開かない）
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab && tab.id) {
+            await chrome.tabs.update(tab.id, { url: r.href });
+            window.close();
+            return;
+          }
+        } catch (e) { /* フォールバックへ */ }
         chrome.tabs.create({ url: r.href });
       });
       li.appendChild(a);
