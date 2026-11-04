@@ -46,3 +46,10 @@
 #pv-checker-panel li a:hover { text-decoration: underline; }
 #pv-checker-panel .pv-cta { display: block; color: #9db4c4; font-size: 12px; margin-top: 1px; }
 #pv-checker-panel .pv-brand { font-size: 11px; color: #71879a; margin-top: 12px; white-space: nowrap; }
+
+/* 未視聴ありと判定した作品カードのハイライト（ページ上でも一目で分かるように） */
+.pv-hl-unwatched {
+  outline: 3px solid #38bdf8 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.6) !important;
+}
