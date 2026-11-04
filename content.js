@@ -11,9 +11,15 @@
 //   "Resume" / "Resume S3 E5" / "Continue Watching"          -> 視聴済み側
 //   "Play Episode 5" / "Play S3 E5" / "Play Season 3 Episode 5" -> 未視聴
 //   "Watch Now" は「今すぐ観る」相当で判定不能、"Play Trailer" 等の予告編は対象外
-//   "Play" 単独は判定不能（v1.1.1で変更）: 実ページのホバーカードには再生アイコン等の
-//   "Play" という短い要素が常駐しており、未視聴にすると全作品が誤判定になるため。
-//   英語の実物文言が判明したら、その形に合わせてパターンを調整すること。
+//
+// 映画の文言（v1.2で追加。ユーザーの実物スクショで確認済み）:
+//   ホバー: 未視聴は「再生」/ "Play"、視聴中・視聴済みは「続きを観る」/ "Resume"
+//     （観終わった映画もホバーでは「続きを観る」になる ＝ 視聴済み側で正しい）
+//   詳細ページ（大きい画面）: 観終わった映画は「もう一度観る」/ "Watch again"
+//     → 仕様変更でホバー側にも出てきた場合に備え、視聴済み側として判定する
+//   「再生」/ "Play" 単独は "弱い未視聴" として扱う: 強い文言（エピソード系など）が
+//     1つも無い場合にだけ採用し、「今すぐ観る」等の判定不能な本命ボタンがある場合は
+//     そちらを優先して弱い文言を捨てる（v1.1 の全件誤判定の再発防止）。
 //
 // パネル等の表示文言は chrome.i18n（_locales）から取る。判定はページ側の表示言語に
 // 依存するため、日本語・英語両方のパターンを常に有効にしている。
@@ -60,7 +66,7 @@
     const t = normalizeText(rawText);
     if (!t) return { status: 'unknown', ctaText: '' };
     const compact = t.replace(/\s+/g, '');
-    if (/の続きを観る/.test(compact) || compact === '続きを観る') {
+    if (/の続きを観る/.test(compact) || compact === '続きを観る' || /もう一度観る/.test(compact)) {
       return { status: 'resume', ctaText: t }; // 視聴済み側
     }
     if (/エピソード\d+を再生/.test(compact)) {
@@ -68,14 +74,17 @@
     }
     // 英語UI向け（ページの表示言語が英語の場合）。予告編（Play Trailer 等）は
     // どのパターンにも一致しないので自然に判定不能へ落ちる。
-    // "Play" 単独は未視聴にしない: ホバーカードには再生アイコン由来の "Play" 要素が
-    // 常駐しうるため（v1.1 の不具合: 全作品が未視聴に誤判定された）。
-    if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t)) {
+    if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t) || /\bwatch again\b/i.test(t)) {
       return { status: 'resume', ctaText: t }; // 視聴済み側
     }
     if (/^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
       || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)) {
       return { status: 'unwatched', ctaText: t }; // 未視聴
+    }
+    // 映画の未視聴ボタン（「再生」/ "Play" 単独）は "弱い未視聴" として返す。
+    // 強い文言が他にある場合はそちらが優先される（findCtaElement の優先度制御）。
+    if (compact === '再生' || /^play$/i.test(t)) {
+      return { status: 'unwatched', ctaText: t, weak: true };
     }
     return { status: 'unknown', ctaText: t };
   }
@@ -85,10 +94,13 @@
     const t = normalizeText(text);
     if (!t || t.length > 40) return false;
     const compact = t.replace(/\s+/g, '');
-    if (/の続きを観る/.test(compact) || /エピソード\d+を再生/.test(compact) || /を再生/.test(compact) || /今すぐ観る/.test(compact)) return true;
-    // 英語UI向け。"Play" 単独は候補にしない（アイコン由来の常駐要素を拾わないため）
-    return /\bresume\b/i.test(t)
+    if (/の続きを観る/.test(compact) || compact === '続きを観る' || /もう一度観る/.test(compact) || /エピソード\d+を再生/.test(compact) || /を再生/.test(compact) || /今すぐ観る/.test(compact)) return true;
+    if (compact === '再生') return true; // 映画の未視聴ボタン（弱い未視聴の候補）
+    // 英語UI向け
+    return /^play$/i.test(t) // 映画の未視聴ボタン（弱い未視聴の候補）
+      || /\bresume\b/i.test(t)
       || /\bcontinue watching\b/i.test(t)
+      || /\bwatch again\b/i.test(t)
       || /^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
       || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
       || /\bwatch now\b/i.test(t)
@@ -199,6 +211,9 @@
   // CTAテキストを持つ要素を探す。
   // 「予告編を再生」のような別ボタンに誤爆しないよう、エピソード判定できる文言
   // （続きを観る／エピソード○を再生）を最優先し、その中では一番短い＝深い要素を選ぶ。
+  // 映画の「再生」/ "Play"（弱い未視聴）は、強い文言が1つも無い場合にだけ使う。
+  // ただし「今すぐ観る」等の判定不能な本命ボタンがある場合は弱い文言を捨てる
+  // （予告編だけは本命ではないので、弱い文言をブロックしない）。
   function findCtaElement(root) {
     if (!root) return null;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
@@ -208,14 +223,20 @@
       if (!el || el.id === PANEL_ID || el.closest?.('#' + PANEL_ID)) return;
       const t = normalizeText(el.textContent);
       if (looksLikeCta(t) && el.children.length <= 3 && isVisible(el)) {
-        candidates.push({ el, len: t.length, priority: classifyCta(t).status !== 'unknown' ? 0 : 1 });
+        const cls = classifyCta(t);
+        const priority = cls.weak ? 1 : (cls.status !== 'unknown' ? 0 : 2);
+        candidates.push({ el, len: t.length, priority, cls, text: t });
       }
     };
     consider(root);
     while ((node = walker.nextNode())) consider(node);
     if (!candidates.length) return null;
-    candidates.sort((a, b) => a.priority - b.priority || a.len - b.len);
-    return candidates[0].el;
+    const isTrailer = (text) => /予告編/.test(text) || /\btrailer\b/i.test(text);
+    const hasBlocker = candidates.some((c) => c.cls.status === 'unknown' && !isTrailer(c.text));
+    const usable = hasBlocker ? candidates.filter((c) => !c.cls.weak) : candidates;
+    if (!usable.length) return null;
+    usable.sort((a, b) => a.priority - b.priority || a.len - b.len);
+    return usable[0].el;
   }
 
   function snapshotCtaElements() {
