@@ -1,0 +1,117 @@
+name: Publish to Chrome Web Store
+
+# Runs when a version tag (v*) is pushed, or manually from the Actions tab.
+# Builds the webstore package from the checked-out tree, uploads it, and
+# submits it for review. Credentials come from repository secrets only:
+# CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN,
+# CWS_PUBLISHER_ID, CWS_EXTENSION_ID.
+# Adapted from the VRChat add-on repo's workflow (2026-11-04). Differences:
+# no SOURCE_FILES_SHA256.txt step, and the package contains only the
+# extension runtime files with manifest.json at the zip root.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Submit for review after upload"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-webstore
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build webstore package
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pkg"
+          cp manifest.json background.js content.js content.css popup.html popup.js "$RUNNER_TEMP/pkg/"
+          cp -a icons "$RUNNER_TEMP/pkg/"
+          VERSION="$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
+          echo "package version: $VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/pkg"
+          zip -q -r "$RUNNER_TEMP/webstore.zip" .
+          unzip -l "$RUNNER_TEMP/webstore.zip"
+
+      - name: Get access token
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESP="$(curl -sS -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=$CWS_CLIENT_ID" \
+            -d "client_secret=$CWS_CLIENT_SECRET" \
+            -d "refresh_token=$CWS_REFRESH_TOKEN" \
+            -d "grant_type=refresh_token")"
+          TOKEN="$(echo "$RESP" | jq -r '.access_token // empty')"
+          if [ -z "$TOKEN" ]; then
+            echo "Failed to obtain an access token:"
+            echo "$RESP" | jq .
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Check current store status
+        env:
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+          ITEM="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
+          echo "ITEM=$ITEM" >> "$GITHUB_ENV"
+          curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://chromewebstore.googleapis.com/v2/$ITEM:fetchStatus" | tee status.json | jq .
+          UPLOAD_STATE="$(jq -r '.lastAsyncUploadState // "NONE"' status.json)"
+          if [ "$UPLOAD_STATE" = "IN_PROGRESS" ]; then
+            echo "A previous upload is still being processed. Aborting."
+            exit 1
+          fi
+
+      - name: Upload package
+        run: |
+          set -euo pipefail
+          curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" -X POST \
+            -T "$RUNNER_TEMP/webstore.zip" \
+            "https://chromewebstore.googleapis.com/upload/v2/$ITEM:upload" | tee upload.json | jq .
+          STATE="$(jq -r '.uploadState // "UNKNOWN"' upload.json)"
+          echo "uploadState: $STATE"
+          TRIES=0
+          while [ "$STATE" = "IN_PROGRESS" ] && [ "$TRIES" -lt 30 ]; do
+            sleep 10
+            TRIES=$((TRIES + 1))
+            curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://chromewebstore.googleapis.com/v2/$ITEM:fetchStatus" > status.json
+            STATE="$(jq -r '.lastAsyncUploadState // "UNKNOWN"' status.json)"
+            echo "poll $TRIES: $STATE"
+          done
+          if [ "$STATE" != "SUCCEEDED" ]; then
+            echo "Upload did not succeed (state: $STATE)."
+            exit 1
+          fi
+
+      - name: Publish (submit for review)
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          set -euo pipefail
+          curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "https://chromewebstore.googleapis.com/v2/$ITEM:publish" | tee publish.json | jq .
+          echo "Submitted version $VERSION for review."

@@ -1,0 +1,45 @@
+#pv-checker-panel {
+  position: fixed;
+  top: 76px;
+  right: 16px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  z-index: 2147483000;
+  background: #0f171e;
+  color: #fff;
+  border: 1px solid #374550;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  font-family: "Amazon Ember", "Hiragino Kaku Gothic ProN", sans-serif;
+  font-size: 13px;
+  padding: 12px 14px;
+}
+#pv-checker-panel .pv-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+#pv-checker-panel .pv-title { font-weight: 700; font-size: 14px; }
+#pv-checker-panel .pv-close {
+  background: transparent; border: none; color: #fff;
+  font-size: 18px; cursor: pointer; line-height: 1;
+}
+#pv-checker-panel .pv-status { color: #c7d5e0; margin-bottom: 8px; word-break: break-all; }
+#pv-checker-panel .pv-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+#pv-checker-panel .pv-actions button {
+  background: #232f3e; color: #fff; border: 1px solid #4a5a68;
+  border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+#pv-checker-panel .pv-actions button:hover { background: #31445a; }
+#pv-checker-panel .pv-section h4 { margin: 10px 0 4px; font-size: 13px; }
+#pv-checker-panel .pv-unwatched h4 { color: #7ee2a8; }
+#pv-checker-panel .pv-resume h4 { color: #9db4c4; }
+#pv-checker-panel .pv-unknown h4 { color: #e8c87a; }
+#pv-checker-panel ul { list-style: none; margin: 0; padding: 0; }
+#pv-checker-panel li { padding: 4px 0; border-top: 1px solid #22303c; }
+#pv-checker-panel li a { color: #fff; text-decoration: none; font-weight: 600; }
+#pv-checker-panel li a:hover { text-decoration: underline; }
+#pv-checker-panel .pv-cta { display: block; color: #9db4c4; font-size: 12px; margin-top: 1px; }
