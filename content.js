@@ -89,9 +89,16 @@
     for (const link of links) {
       const id = extractTitleId(link.href);
       if (!id || byId.has(id)) continue;
+      // ページ内の detail リンクを無条件に全部拾うと、宣伝バナーや
+      // 非表示の埋め込み要素まで作品として数えてしまう（実例: Love Transit）。
+      // 実物のカードだけに絞る: ページの chrome 内は除き、ポスター画像があり、
+      // 実際に表示されている要素だけをカードとする。
+      if (link.closest('header, nav, footer')) continue;
       const container = findCardContainer(link);
       if (!container) continue;
       const img = container.querySelector('img');
+      if (!img) continue;
+      if (!isVisible(container)) continue;
       const title =
         normalizeText(link.getAttribute('aria-label')) ||
         normalizeText(img && img.alt) ||
