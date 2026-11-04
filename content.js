@@ -399,31 +399,6 @@
     } catch (e) { /* storage 不可でも巡回は続ける */ }
   }
 
-  // ---------- ハイライト ----------
-
-  const HL_CLASS = 'pv-hl-unwatched';
-
-  function clearHighlights() {
-    document.querySelectorAll('.' + HL_CLASS).forEach((el) => el.classList.remove(HL_CLASS));
-  }
-
-  // 前回チェック結果（保存済み）の未視聴ありを、ページ表示にも反映する。
-  // ウォッチリストの描画は遅れることがあるので、しばらく再試行する。
-  async function applyStoredHighlights() {
-    try {
-      const data = await chrome.storage.local.get('pvLastScan');
-      const results = (data.pvLastScan && data.pvLastScan.results) || [];
-      const wanted = new Set(results.filter((r) => r.status === 'unwatched').map((r) => r.id));
-      for (let i = 0; i < 12 && wanted.size > 0; i++) {
-        if (scanning) return;
-        for (const c of findCards()) {
-          if (wanted.has(c.id)) { c.el.classList.add(HL_CLASS); wanted.delete(c.id); }
-        }
-        if (wanted.size > 0) await wait(500);
-      }
-    } catch (e) { /* noop */ }
-  }
-
   // ---------- 巡回本体 ----------
 
   async function checkCard(card) {
@@ -512,7 +487,6 @@
     panelHidden = false;
     scanResults = [];
     debugLog = [];
-    clearHighlights();
     ensurePanel();
     setPanelRunning(true);
     renderResults();
@@ -540,7 +514,6 @@
             setStatus(msg('statusScanning', [String(processed.size), card.title]));
             const r = await checkCard(card);
             scanResults.push(r);
-            if (r.status === 'unwatched') card.el.classList.add(HL_CLASS);
             renderResults();
             await saveState();
             await wait(BETWEEN_CARDS_MS);
@@ -600,9 +573,6 @@
           await wait(200);
         }
         startScan();
-      } else {
-        // チェック予定が無い通常表示では、前回の結果のハイライトだけ復元する
-        applyStoredHighlights();
       }
     } catch (e) { /* noop */ }
   })();
