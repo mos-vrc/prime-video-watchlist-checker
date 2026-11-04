@@ -1,4 +1,4 @@
-// Amazon Prime Video 未視聴ウォッチリストチェッカー - background service worker
+// Prime Video ウォッチリスト新着チェッカー - background service worker
 // ポップアップからの「チェック開始」を受けて、ウォッチリストのタブを
 // 開く／前面化し、content script に巡回開始を伝える。
 

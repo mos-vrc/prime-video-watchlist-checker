@@ -1,11 +1,11 @@
 # Chrome Web Store 掲載素材（ドラフト）
 
-「Amazon Prime Video 未視聴ウォッチリストチェッカー」の Developer Dashboard 入力用テキスト。
+「Prime Video ウォッチリスト新着チェッカー」の Developer Dashboard 入力用テキスト。
 すべてドラフトであり、提出前にユーザーの確認を取ること。
 
 ## アイテム名（manifest の name と一致）
 
-Amazon Prime Video 未視聴ウォッチリストチェッカー
+Prime Video ウォッチリスト新着チェッカー
 
 ## 概要（manifest の description、ストアの短い説明に使われる）
 

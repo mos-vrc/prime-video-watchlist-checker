@@ -1,5 +1,5 @@
 # Privacy Policy
-## Amazon Prime Video 未視聴ウォッチリストチェッカー
+## Prime Video ウォッチリスト新着チェッカー
 
 最終更新日: 2026年11月4日
 

@@ -1,12 +1,12 @@
 # Chrome Web Store listing — English localization (DRAFT)
 
-English listing texts for "Amazon Prime Video Unwatched Watchlist Checker", for entry in the Developer Dashboard as an additional localized listing (the default listing stays Japanese). Everything here is a draft; confirm with the user before submitting.
+English listing texts for "Prime Video Watchlist New Episode Checker", for entry in the Developer Dashboard as an additional localized listing (the default listing stays Japanese). Everything here is a draft; confirm with the user before submitting.
 
 How to apply: in the Developer Dashboard's Store listing page, use the language selector at the top to add "English" and paste these texts. The extension package itself already ships `_locales/en`, so its name/description/UI follow the browser's display language automatically.
 
 ## Item name (matches manifest `name` in the en locale)
 
-Amazon Prime Video Unwatched Watchlist Checker
+Prime Video Watchlist New Episode Checker
 
 ## Summary (matches manifest `description` in the en locale)
 
