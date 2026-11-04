@@ -20,11 +20,10 @@
 }
 #pv-checker-panel .pv-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 6px;
 }
-#pv-checker-panel .pv-title { font-weight: 700; font-size: 13px; min-width: 0; line-height: 1.35; }
 #pv-checker-panel .pv-close {
   background: transparent; border: none; color: #fff;
   font-size: 18px; cursor: pointer; line-height: 1;
@@ -45,3 +44,4 @@
 #pv-checker-panel li a { color: #fff; text-decoration: none; font-weight: 600; }
 #pv-checker-panel li a:hover { text-decoration: underline; }
 #pv-checker-panel .pv-cta { display: block; color: #9db4c4; font-size: 12px; margin-top: 1px; }
+#pv-checker-panel .pv-brand { font-size: 11px; color: #71879a; margin-top: 12px; white-space: nowrap; }

@@ -230,7 +230,6 @@
     panel.id = PANEL_ID;
     panel.innerHTML = `
       <div class="pv-head">
-        <span class="pv-title">Amazon Prime Video 未視聴ウォッチリストチェッカー</span>
         <button class="pv-close" type="button">×</button>
       </div>
       <div class="pv-status">待機中</div>
@@ -241,6 +240,7 @@
       <div class="pv-section pv-unwatched"><h4>未視聴あり（0）</h4><ul></ul></div>
       <div class="pv-section pv-resume"><h4>視聴済み側・続きを観る（0）</h4><ul></ul></div>
       <div class="pv-section pv-unknown"><h4>判定不能（0）</h4><ul></ul></div>
+      <div class="pv-brand">▶Amazon Prime Video 未視聴ウォッチリストチェッカー</div>
     `;
     document.body.appendChild(panel);
     panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
