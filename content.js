@@ -24,6 +24,12 @@
 // パネル等の表示文言は chrome.i18n（_locales）から取る。判定はページ側の表示言語に
 // 依存するため、日本語・英語両方のパターンを常に有効にしている。
 //
+// 第1話無料の作品（v1.2.3で追加。ユーザーの実物スクショで確認済み）:
+//   ホバーカードに「第1話無料」/ "First episode free" と出る作品のボタンは
+//   「今すぐ観る」/ "Watch now" になる。これは第1話から再生する＝未視聴として扱う。
+//   目印が同じホバーカード等にある場合に限る。目印のない「今すぐ観る」は
+//   従来通り判定不能（映画など他の文脈での誤判定を防ぐため）。
+//
 // 結果はページ内パネルに表示し、chrome.storage.local にも保存して
 // 拡張ポップアップから「前回の結果」として見られるようにする。
 
@@ -90,6 +96,12 @@
     return { status: 'unknown', ctaText: t };
   }
 
+  // 「今すぐ観る」/ "Watch now" そのものの文言かどうか
+  function isWatchNowText(rawText) {
+    const t = normalizeText(rawText);
+    return t.replace(/\s+/g, '') === '今すぐ観る' || /^watch\s+now$/i.test(t);
+  }
+
   // CTAらしい文言かどうか（ホバーカード内のボタン探索用）
   function looksLikeCta(text) {
     const t = normalizeText(text);
@@ -111,7 +123,7 @@
 
   // Node 環境（テスト）からも使えるように公開
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { normalizeText, extractTitleId, classifyCta, looksLikeCta };
+    module.exports = { normalizeText, extractTitleId, classifyCta, looksLikeCta, isWatchNowText };
   }
   if (typeof document === 'undefined') return;
 
@@ -217,6 +229,11 @@
   // （予告編だけは本命ではないので、弱い文言をブロックしない）。
   function findCtaElements(root) {
     if (!root) return [];
+    // 「第1話無料」の目印が探索範囲（ホバーカード等）の中にあるか。
+    // ページ全体（body）を範囲にする場合は、別の作品の目印を拾わないよう無効にする。
+    const rootText = normalizeText(root.textContent);
+    const freeFirst = root !== document.body
+      && (/第1話無料/.test(rootText.replace(/\s+/g, '')) || /first episode free/i.test(rootText));
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     const candidates = [];
     let node = root;
@@ -224,7 +241,11 @@
       if (!el || el.id === PANEL_ID || el.closest?.('#' + PANEL_ID)) return;
       const t = normalizeText(el.textContent);
       if (looksLikeCta(t) && el.children.length <= 3 && isVisible(el)) {
-        const cls = classifyCta(t);
+        let cls = classifyCta(t);
+        // 第1話無料の目印がある文脈では、「今すぐ観る」は第1話からの再生＝未視聴
+        if (cls.status === 'unknown' && freeFirst && isWatchNowText(t)) {
+          cls = { status: 'unwatched', ctaText: t };
+        }
         const priority = cls.weak ? 1 : (cls.status !== 'unknown' ? 0 : 2);
         candidates.push({ el, len: t.length, priority, cls, text: t });
       }
@@ -247,6 +268,13 @@
     return list.length ? list[0].el : null;
   }
 
+  // 最善の候補を {el, cls, text} ごと返す。判定には文脈（第1話無料の目印など）が
+  // 効く場合があるので、要素だけを返して後から文言だけで再判定してはいけない。
+  function findCtaCandidate(root) {
+    const list = findCtaElements(root);
+    return list.length ? list[0] : null;
+  }
+
   function snapshotCtaElements() {
     // 要素→文言の対応で覚える。ポータルのボタン要素が作品ごとに再利用され、
     // 文言だけ差し替わる場合でも「変わった」と検出できるようにするため。
@@ -259,17 +287,17 @@
   // 2b) 作品リンクから遡って見つけるポータル 3) ホバー前から変わったCTA要素
   function findCtaFor(card, beforeMap) {
     // 1) カード内（ホバーでカード自体が展開するタイプ）
-    let el = findCtaElement(card.el);
-    if (el) return { el, where: 'card' };
+    let cand = findCtaCandidate(card.el);
+    if (cand) return { el: cand.el, cls: cand.cls, where: 'card' };
 
     // 2) 同じ作品IDへのリンクを含む可視要素（body直下などにポータル表示されるタイプ）
     const candidates = document.querySelectorAll('body > div, body > section, [data-testid], [role="dialog"], [class*="hover" i], [class*="popover" i], [class*="Hover" i]');
-    for (const cand of candidates) {
-      if (cand.id === PANEL_ID || cand.contains(card.el)) continue;
-      const hasSame = [...cand.querySelectorAll('a[href*="/detail/"]')].some((a) => extractTitleId(a.href) === card.id);
+    for (const candEl of candidates) {
+      if (candEl.id === PANEL_ID || candEl.contains(card.el)) continue;
+      const hasSame = [...candEl.querySelectorAll('a[href*="/detail/"]')].some((a) => extractTitleId(a.href) === card.id);
       if (!hasSame) continue;
-      el = findCtaElement(cand);
-      if (el) return { el, where: 'portal' };
+      cand = findCtaCandidate(candEl);
+      if (cand) return { el: cand.el, cls: cand.cls, where: 'portal' };
     }
 
     // 2b) ポータル内の作品リンクから外枠まで遡って探す。
@@ -291,8 +319,8 @@
         if (ids.size > 1) break;
         portal = parent;
       }
-      el = findCtaElement(portal);
-      if (el) return { el, where: 'portal-link' };
+      cand = findCtaCandidate(portal);
+      if (cand) return { el: cand.el, cls: cand.cls, where: 'portal-link' };
     }
 
     // 3) ホバー前には無かったCTA要素、または文言が変わったCTA要素
@@ -301,7 +329,7 @@
     // 新しいボタンを見つけられないことがあった）
     for (const c of findCtaElements(document.body)) {
       if (!beforeMap.has(c.el) || beforeMap.get(c.el) !== c.text) {
-        return { el: c.el, where: 'new-element' };
+        return { el: c.el, cls: c.cls, where: 'new-element' };
       }
     }
 
@@ -479,14 +507,15 @@
           // 初回スキャンなど描画が遅い状況では、本命ボタン（Resume等）が後から
           // 描画されるのに先に弱い文言で確定してしまう誤判定が起きるため、
           // DOMが落ち着くまで弱い文言は保留して待ち続ける（v1.2.1）。
-          if (!classifyCta(normalizeText(f.el.textContent)).weak) break;
+          // 判定は探索時の文脈込みの結果（f.cls）を使う（第1話無料の判定など）。
+          if (!(f.cls || classifyCta(normalizeText(f.el.textContent))).weak) break;
         }
         const elapsed = Date.now() - hoverStartedAt;
         if (!found && domReactions === 0 && elapsed > NO_REACTION_MS) break;
         // ホバーカードは出たがボタンが無く、DOMの変化も止まったなら、
         // 最大時間まで待ち切らずに「ボタン無し」として次へ進む（高速化）。
         // 弱い文言だけが見つかっている場合は見切りを遅らせる。
-        const weakOnly = found && classifyCta(normalizeText(found.el.textContent)).weak;
+        const weakOnly = found && (found.cls || classifyCta(normalizeText(found.el.textContent))).weak;
         const settleMin = weakOnly ? WEAK_SETTLE_MIN_MS : SETTLE_MIN_MS;
         if (domReactions > 0 && elapsed > settleMin && Date.now() - lastReactionAt > SETTLE_MS) break;
         await wait(HOVER_POLL_MS);
@@ -500,7 +529,7 @@
     let result;
     if (found) {
       const rawText = normalizeText(found.el.textContent);
-      const cls = classifyCta(rawText);
+      const cls = found.cls || classifyCta(rawText);
       const hoverRoot = found.el.closest('div,section,article') || found.el;
       debug.ctaText = rawText;
       debug.foundIn = found.where;
