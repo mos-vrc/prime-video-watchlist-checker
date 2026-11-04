@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/pkg"
           cp manifest.json background.js content.js content.css popup.html popup.js "$RUNNER_TEMP/pkg/"
-          cp -a icons "$RUNNER_TEMP/pkg/"
+          cp -a icons _locales "$RUNNER_TEMP/pkg/"
           VERSION="$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
           echo "package version: $VERSION"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
