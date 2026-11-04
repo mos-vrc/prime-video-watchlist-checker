@@ -229,10 +229,10 @@
     panel = document.createElement('div');
     panel.id = PANEL_ID;
     panel.innerHTML = `
-      <div class="pv-head">
+      <div class="pv-toprow">
+        <div class="pv-status">待機中</div>
         <button class="pv-close" type="button">×</button>
       </div>
-      <div class="pv-status">待機中</div>
       <div class="pv-actions">
         <button class="pv-cancel" type="button">中止</button>
         <button class="pv-log" type="button" style="display:none">診断ログを保存</button>
