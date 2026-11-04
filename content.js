@@ -36,6 +36,7 @@
   const NO_REACTION_MS = 800;      // ホバーにDOMが全く反応しなければ、この時間で見切る
   const SETTLE_MS = 700;           // 反応はあったがDOMの変化がこの時間止まったら、ボタン無しと見切る
   const SETTLE_MIN_MS = 900;       // ただしホバー開始からこの時間までは見切らない
+  const WEAK_SETTLE_MIN_MS = 1800; // 弱い文言（映画の「再生」/ "Play"）だけの場合は、本命ボタンの遅延描画に備えてこの時間までは確定しない
   const BETWEEN_CARDS_MS = 60;     // 作品間の間隔
   const SCROLL_WAIT_MS = 150;
   const MAX_SCROLL_ROUNDS = 120;   // 無限スクロールの安全上限
@@ -432,13 +433,24 @@
       while (Date.now() < deadline && !cancelRequested) {
         // React系のホバーはマウスが留まっている前提のことがあるので、時々 mousemove を足す
         dispatchHover(hoverTargets[0], true);
-        found = findCtaFor(card, before);
-        if (found) break;
+        const f = findCtaFor(card, before);
+        if (f) {
+          found = f;
+          // 強い文言（エピソード系・Resume系）が見つかれば即確定する。
+          // 弱い文言（映画の「再生」/ "Play" 単独）だけのうちは確定しない:
+          // 初回スキャンなど描画が遅い状況では、本命ボタン（Resume等）が後から
+          // 描画されるのに先に弱い文言で確定してしまう誤判定が起きるため、
+          // DOMが落ち着くまで弱い文言は保留して待ち続ける（v1.2.1）。
+          if (!classifyCta(normalizeText(f.el.textContent)).weak) break;
+        }
         const elapsed = Date.now() - hoverStartedAt;
-        if (domReactions === 0 && elapsed > NO_REACTION_MS) break;
+        if (!found && domReactions === 0 && elapsed > NO_REACTION_MS) break;
         // ホバーカードは出たがボタンが無く、DOMの変化も止まったなら、
-        // 最大時間まで待ち切らずに「ボタン無し」として次へ進む（高速化）
-        if (domReactions > 0 && elapsed > SETTLE_MIN_MS && Date.now() - lastReactionAt > SETTLE_MS) break;
+        // 最大時間まで待ち切らずに「ボタン無し」として次へ進む（高速化）。
+        // 弱い文言だけが見つかっている場合は見切りを遅らせる。
+        const weakOnly = found && classifyCta(normalizeText(found.el.textContent)).weak;
+        const settleMin = weakOnly ? WEAK_SETTLE_MIN_MS : SETTLE_MIN_MS;
+        if (domReactions > 0 && elapsed > settleMin && Date.now() - lastReactionAt > SETTLE_MS) break;
         await wait(HOVER_POLL_MS);
       }
     } finally {
