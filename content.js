@@ -7,10 +7,13 @@
 //   「エピソード○を再生」等 "エピソード○を再生"           -> 未視聴（新着エピソードあり候補）
 //   それ以外／ボタンが取れない                              -> 判定不能（診断ログに原文を残す）
 //
-// 英語UI（amazon.co.jp の英語表示など）向けの対応パターン（v1.1で追加。実ページ未検証の推定）:
+// 英語UI（amazon.co.jp の英語表示など）向けの対応パターン（v1.1で追加）:
 //   "Resume" / "Resume S3 E5" / "Continue Watching"          -> 視聴済み側
-//   "Play Episode 5" / "Play S3 E5" / "Play Season 3 …" / "Play" そのもの -> 未視聴
+//   "Play Episode 5" / "Play S3 E5" / "Play Season 3 Episode 5" -> 未視聴
 //   "Watch Now" は「今すぐ観る」相当で判定不能、"Play Trailer" 等の予告編は対象外
+//   "Play" 単独は判定不能（v1.1.1で変更）: 実ページのホバーカードには再生アイコン等の
+//   "Play" という短い要素が常駐しており、未視聴にすると全作品が誤判定になるため。
+//   英語の実物文言が判明したら、その形に合わせてパターンを調整すること。
 //
 // パネル等の表示文言は chrome.i18n（_locales）から取る。判定はページ側の表示言語に
 // 依存するため、日本語・英語両方のパターンを常に有効にしている。
@@ -65,13 +68,13 @@
     }
     // 英語UI向け（ページの表示言語が英語の場合）。予告編（Play Trailer 等）は
     // どのパターンにも一致しないので自然に判定不能へ落ちる。
+    // "Play" 単独は未視聴にしない: ホバーカードには再生アイコン由来の "Play" 要素が
+    // 常駐しうるため（v1.1 の不具合: 全作品が未視聴に誤判定された）。
     if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t)) {
       return { status: 'resume', ctaText: t }; // 視聴済み側
     }
-    if (/^play\b[^]*\bepisode\s*\d+/i.test(t)
-      || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
-      || /^play\s+season\s+\d+\b/i.test(t)
-      || /^play$/i.test(t)) {
+    if (/^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
+      || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)) {
       return { status: 'unwatched', ctaText: t }; // 未視聴
     }
     return { status: 'unknown', ctaText: t };
@@ -83,11 +86,10 @@
     if (!t || t.length > 40) return false;
     const compact = t.replace(/\s+/g, '');
     if (/の続きを観る/.test(compact) || /エピソード\d+を再生/.test(compact) || /を再生/.test(compact) || /今すぐ観る/.test(compact)) return true;
-    // 英語UI向け
-    return /^play$/i.test(t)
-      || /\bresume\b/i.test(t)
+    // 英語UI向け。"Play" 単独は候補にしない（アイコン由来の常駐要素を拾わないため）
+    return /\bresume\b/i.test(t)
       || /\bcontinue watching\b/i.test(t)
-      || /\bplay\b[^]*\bepisode\b/i.test(t)
+      || /^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
       || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
       || /\bwatch now\b/i.test(t)
       || /\bplay trailer\b/i.test(t)

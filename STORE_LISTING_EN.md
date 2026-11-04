@@ -21,7 +21,7 @@ On Prime Video, a watchlist doesn't tell you when a new episode arrives — you 
 ■ How it decides
 Each title is classified by the play-button label shown when you hover over it:
 ・"Resume" (e.g. "Resume S3 E5") → already started
-・"Play Episode …" / "Play S3 E5" / "Play" → has unwatched episodes
+・"Play Episode …" / "Play S3 E5" → has unwatched episodes
 ・Anything else is shown separately as "Couldn't tell"
 
 (Japanese UI labels are supported too: 「〜の続きを観る」→ started, 「エピソード○を再生」→ unwatched.)
