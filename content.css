@@ -38,7 +38,7 @@
 #pv-checker-panel .pv-section h4 { margin: 10px 0 4px; font-size: 13px; }
 #pv-checker-panel .pv-unwatched h4 { color: #7ee2a8; }
 #pv-checker-panel .pv-resume h4 { color: #9db4c4; }
-#pv-checker-panel .pv-unknown h4 { color: #e8c87a; }
+#pv-checker-panel .pv-unknown h4 { color: #9db4c4; }
 #pv-checker-panel ul { list-style: none; margin: 0; padding: 0; }
 #pv-checker-panel li { padding: 4px 0; border-top: 1px solid #22303c; }
 #pv-checker-panel li a { color: #fff; text-decoration: none; font-weight: 600; }
