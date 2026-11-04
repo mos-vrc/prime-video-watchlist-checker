@@ -1,4 +1,4 @@
-// Prime Video 未視聴エピソードチェッカー - content script
+// Amazon Prime Video 未視聴ウォッチリストチェッカー - content script
 // ウォッチリストページを下までスクロールしながら各作品カードを巡回し、
 // 合成ホバーイベントでホバーカードを出させ、再生ボタンの文言で判定する。
 //
@@ -230,7 +230,7 @@
     panel.id = PANEL_ID;
     panel.innerHTML = `
       <div class="pv-head">
-        <span class="pv-title">未視聴エピソードチェック</span>
+        <span class="pv-title">Amazon Prime Video 未視聴ウォッチリストチェッカー</span>
         <button class="pv-close" type="button">×</button>
       </div>
       <div class="pv-status">待機中</div>

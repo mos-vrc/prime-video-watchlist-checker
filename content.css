@@ -24,7 +24,7 @@
   align-items: center;
   margin-bottom: 6px;
 }
-#pv-checker-panel .pv-title { font-weight: 700; font-size: 14px; }
+#pv-checker-panel .pv-title { font-weight: 700; font-size: 13px; min-width: 0; line-height: 1.35; }
 #pv-checker-panel .pv-close {
   background: transparent; border: none; color: #fff;
   font-size: 18px; cursor: pointer; line-height: 1;
