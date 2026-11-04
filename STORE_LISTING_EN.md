@@ -10,7 +10,7 @@ Amazon Prime Video Unwatched Watchlist Checker
 
 ## Summary (matches manifest `description` in the en locale)
 
-Scans your Amazon Prime Video watchlist and lists titles that have unwatched episodes, based on each card's hover play-button label ("Resume" vs. "Play Episode …").
+Scans your Amazon Prime Video watchlist and lists titles with unwatched episodes, judged by each card's hover play-button label.
 
 ## Detailed description (draft)
 
