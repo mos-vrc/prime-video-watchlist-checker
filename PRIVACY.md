@@ -22,3 +22,30 @@ amazon.co.jp / amazon.com / primevideo.com のログインは Chrome 上の既�
 ## 4. お問い合わせ
 
 本ポリシーに関するお問い合わせは、本リポジトリの Issues からお願いします。
+
+---
+
+# Privacy Policy (English)
+## Prime Video Watchlist New Episode Checker
+
+Last updated: November 5, 2026
+
+This extension is an unofficial Chrome extension that lists titles from your Amazon Prime Video watchlist that have unwatched episodes. It is not created, endorsed, or provided by Amazon.com, Inc. or its affiliates.
+
+## 1. Information processed
+
+Only when you run a check while your Prime Video watchlist page is open on amazon.co.jp, amazon.com, or primevideo.com, the extension reads, within that page, the titles shown on the page, the links to the title pages, and the wording of the play buttons in the hover cards (such as "Resume Episode …" or "Play Episode …"), and uses them to determine viewing status.
+
+The information read is processed only within your browser and is never sent to any external server, including the developer's. The extension uses no analytics services, advertising, or tracking.
+
+## 2. Storage in your browser
+
+The extension stores the most recent check results (titles, links, and viewing-status results), the state of the running check, and the "Watchlist to open" setting you selected in the popup, in your browser (chrome.storage.local). This is used solely to show the previous results in the extension's popup and to decide which site to open when a check starts. Stored information is never sent outside your browser, and it is deleted when you uninstall the extension.
+
+## 3. Sign-in information
+
+Sign-in to amazon.co.jp / amazon.com / primevideo.com uses your existing session in Chrome as-is. The extension never reads, stores, or transmits your username, password, authentication tokens, or cookie values.
+
+## 4. Contact
+
+For questions about this policy, please use the Issues of this repository.
