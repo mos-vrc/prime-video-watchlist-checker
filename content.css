@@ -46,6 +46,3 @@
 #pv-checker-panel li a:hover { text-decoration: underline; }
 #pv-checker-panel .pv-cta { display: block; color: #9db4c4; font-size: 12px; margin-top: 1px; }
 #pv-checker-panel .pv-brand { font-size: 11px; color: #71879a; margin-top: 12px; white-space: nowrap; }
-#pv-checker-panel .pv-surface { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #9db4c4; }
-#pv-checker-panel .pv-surface label { white-space: nowrap; }
-#pv-checker-panel .pv-surface-select { flex: 1; min-width: 0; background: #22303c; color: #fff; border: 1px solid #3a4a58; border-radius: 6px; padding: 4px; font-size: 12px; }

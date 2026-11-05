@@ -367,7 +367,6 @@
     let panel = document.getElementById(PANEL_ID);
     if (panel) {
       panel.style.display = panelHidden ? 'none' : '';
-      syncSurfaceSelect(panel);
       return panel;
     }
     panel = document.createElement('div');
@@ -385,39 +384,15 @@
       <div class="pv-section pv-resume"><h4>${msg('headingResume', ['0'])}</h4><ul></ul></div>
       <div class="pv-section pv-unknown"><h4>${msg('headingUnknown', ['0'])}</h4><ul></ul></div>
       <div class="pv-brand">▶${msg('appName')}</div>
-      <div class="pv-surface">
-        <label>${msg('surfaceLabel')}</label>
-        <select class="pv-surface-select">
-          <option value="auto">${msg('surfaceAuto')}</option>
-          <option value="cojp">amazon.co.jp</option>
-          <option value="com">amazon.com</option>
-          <option value="pv">primevideo.com</option>
-        </select>
-      </div>
     `;
     document.body.appendChild(panel);
     panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
     panel.querySelector('.pv-cancel').addEventListener('click', () => { cancelRequested = true; });
     // 診断ログボタンは当面非表示（ユーザー要望）。保存機能自体は残してあり、必要になったら表示に戻す
     panel.querySelector('.pv-log').addEventListener('click', downloadDebugLog);
-    // 開くサイトの選択（v1.2.9でパネルにも追加。ポップアップと同じ pvSurfacePref を共有する）
-    const surfaceSel = panel.querySelector('.pv-surface-select');
-    surfaceSel.addEventListener('change', () => {
-      chrome.storage.local.set({ pvSurfacePref: surfaceSel.value }).catch(() => {});
-    });
-    syncSurfaceSelect(panel);
     setPanelRunning(false);
     panel.style.display = panelHidden ? 'none' : '';
     return panel;
-  }
-
-  // パネルの選択ボックスに保存済みの設定を反映する（ポップアップ側で変えた場合も追随させる）
-  function syncSurfaceSelect(panel) {
-    const sel = panel.querySelector('.pv-surface-select');
-    if (!sel) return;
-    chrome.storage.local.get('pvSurfacePref').then((d) => {
-      if (d.pvSurfacePref) sel.value = d.pvSurfacePref;
-    }).catch(() => {});
   }
 
   // パネルを閉じる（隠す）。巡回中に閉じても巡回は裏で続き、結果はポップアップで見られる。

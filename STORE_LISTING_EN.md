@@ -32,7 +32,7 @@ Each title is classified by the play-button label shown when you hover over it:
 
 ■ How to use
 1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
-2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup or the results panel (default: Auto = the site you checked last time)
+2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup (default: Auto = the site you checked last time)
 3. Results appear in a panel on the page and in the extension popup, grouped into "Has unwatched episodes", "Started / Resume", and "Couldn't tell"
 4. Click a title to go straight to its page
 
