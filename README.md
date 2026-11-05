@@ -4,6 +4,8 @@ Amazon Prime Video（amazon.co.jp／検証中の amazon.com・primevideo.com）�
 
 ## 変更履歴
 
+- **v1.2.8**（2026-11-05、検証用・未公開）: v1.2.7 の不具合修正。明示設定（開くウォッチリスト）が新規タブを開く場合にしか効いておらず、別面のウォッチリストタブが開いていると設定を無視してそのタブを再利用していた（例: primevideo.com でチェックした後に amazon.co.jp を選んでも primevideo.com が開く）。明示設定をタブの再利用・Prime Video タブの誘導にも優先させ、選んだ面のタブだけを使うようにした。あわせて選択ボックスをポップアップ最下部（ブランド表記より下）へ移動
+
 - **v1.2.7**（2026-11-05、検証用・未公開）: チェック開始時に開く面の決め方を3層化。amazon.com と primevideo.com は同じアカウントへの入口違いで、利用者が普段どちらを使っているかは判定できないため、(1) 前回チェックした面を既定で再利用する（primevideo.com は地域つき URL で復元）、(2) 記録が無い初回だけブラウザ表示言語で推測する（日本語→amazon.co.jp、それ以外→amazon.com）、(3) ポップアップに「開くウォッチリスト」の選択ボックス（自動／amazon.co.jp／amazon.com／primevideo.com）を追加し、明示指定できるようにした。primevideo.com を選んで地域の記録が無い場合は初回案内をポップアップに表示し、開始時は primevideo.com のトップを開く（Watchlist へ進んだ時点で保留中のチェックが自動開始する）。タブが既にある場合の再利用ロジックは従来通り
 
 - **v1.2.6**（2026-11-05、検証用・未公開）: primevideo.com 対応の検証版。primevideo.com は地域パス方式（/region/fe/mystuff/watchlist 等）で詳細リンクも /region/<地域>/detail/<id> 形式のため、ホスト権限と content script のマッチに primevideo.com を追加し、結果パネルの作品リンクは URL を組み立てずページ上の実リンクをそのまま使うよう変更（全ドメイン共通の変更）。チェック開始時のタブ再利用も primevideo.com に対応（地域パスから同じ地域のウォッチリストを導出）。判定パターンは .co.jp / .com で確認済みの日英両方をそのまま流用。primevideo.com 実ページでの文言確認はこれから

@@ -23,17 +23,33 @@ function pvWatchlistFromUrl(url) {
   return m ? 'https://www.primevideo.com/region/' + m[1] + '/mystuff/watchlist' : null;
 }
 
+// URL がどの面（サービス）のものかを返す。
+function surfaceOfUrl(url) {
+  if (!url) return null;
+  if (url.startsWith(VIDEO_PREFIXES[0])) return 'com';
+  if (url.startsWith(VIDEO_PREFIXES[1])) return 'cojp';
+  if (url.startsWith('https://www.primevideo.com/')) return 'pv';
+  return null;
+}
+
+// ポップアップでの明示設定を読む（未設定・不正値は auto）。
+async function getSurfacePref() {
+  try {
+    const data = await chrome.storage.local.get('pvSurfacePref');
+    const p = data.pvSurfacePref;
+    return p === 'cojp' || p === 'com' || p === 'pv' ? p : 'auto';
+  } catch (e) { return 'auto'; }
+}
+
 // タブが無い場合に新規で開く先を決める（v1.2.7）。
 // 優先順位: ポップアップでの明示設定 (pvSurfacePref) > 前回のチェック面 > ブラウザ表示言語での推測。
 // primevideo.com は地域が分からないとウォッチリストへ直接は開けないため、
 // 地域の記録が無い場合はトップを開き、利用者が Watchlist へ進んだ時点で
 // pending フラグ経由で自動開始する（content script 側の仕組み）。
-async function resolveNewTabUrl() {
-  let pref = 'auto';
+async function resolveNewTabUrl(pref) {
   let lastUrl = null;
   try {
-    const data = await chrome.storage.local.get(['pvSurfacePref', 'pvLastScan']);
-    pref = data.pvSurfacePref || 'auto';
+    const data = await chrome.storage.local.get('pvLastScan');
     lastUrl = (data.pvLastScan && data.pvLastScan.url) || null;
   } catch (e) { /* noop */ }
   if (pref === 'cojp') return WATCHLIST_URLS[1];
@@ -62,9 +78,11 @@ function domainWatchlistUrl(url) {
   return null;
 }
 
-async function findWatchlistTab() {
+async function findWatchlistTab(pref) {
   const tabs = await chrome.tabs.query({});
-  const cands = tabs.filter((t) => watchlistUrlOf(t.url));
+  // 明示設定がある場合は、その面のタブだけを再利用する（v1.2.8）。
+  // v1.2.7 ではここが設定を見ておらず、別面のタブが開いていると設定を無視して再利用していた。
+  const cands = tabs.filter((t) => watchlistUrlOf(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref));
   if (!cands.length) return null;
   // 今見ているタブを最優先。次に amazon.com、primevideo.com、amazon.co.jp の順。
   const rank = (t) => {
@@ -76,9 +94,9 @@ async function findWatchlistTab() {
   return cands[0];
 }
 
-async function findVideoTab() {
+async function findVideoTab(pref) {
   const tabs = await chrome.tabs.query({});
-  const cands = tabs.filter((t) => domainWatchlistUrl(t.url));
+  const cands = tabs.filter((t) => domainWatchlistUrl(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref));
   if (!cands.length) return null;
   cands.sort((a, b) => (b.active ? 0 : 1) - (a.active ? 0 : 1));
   return cands[0];
@@ -105,7 +123,9 @@ async function sendStartToTab(tabId, tries = 8) {
 }
 
 async function openAndScan() {
-  const existing = await findWatchlistTab();
+  // 明示設定はタブの再利用・誘導・新規タブのすべてに優先する（v1.2.8）
+  const pref = await getSurfacePref();
+  const existing = await findWatchlistTab(pref);
   if (existing) {
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId) {
@@ -121,7 +141,7 @@ async function openAndScan() {
   }
   // ウォッチリストのタブは無いが Prime Video のタブがある場合は、
   // そのタブを同じドメインのウォッチリストへ誘導して使う。
-  const videoTab = await findVideoTab();
+  const videoTab = await findVideoTab(pref);
   if (videoTab) {
     await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: videoTab.id } });
     await chrome.tabs.update(videoTab.id, { active: true, url: domainWatchlistUrl(videoTab.url) });
@@ -133,7 +153,7 @@ async function openAndScan() {
   // タブが無い場合は pending フラグを立ててから新規タブで開く。
   // ページ読み込み後に content script がフラグを見て自動で巡回を始める。
   // 開く先は resolveNewTabUrl（設定 > 前回の面 > 表示言語で推測）。
-  const target = await resolveNewTabUrl();
+  const target = await resolveNewTabUrl(pref);
   await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: null } });
   const tab = await chrome.tabs.create({ url: target, active: true });
   if (tab && tab.id) {
