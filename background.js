@@ -2,11 +2,48 @@
 // ポップアップからの「チェック開始」を受けて、ウォッチリストのタブを
 // 開く／前面化し、content script に巡回開始を伝える。
 
-const WATCHLIST_URL = 'https://www.amazon.co.jp/gp/video/mystuff/watchlist';
+const WATCHLIST_URLS = [
+  'https://www.amazon.com/gp/video/mystuff/watchlist',
+  'https://www.amazon.co.jp/gp/video/mystuff/watchlist',
+];
+// Prime Video 内のページ（ウォッチリスト以外）を開いているタブは、
+// 同じドメインのウォッチリストへ誘導して再利用する。
+const VIDEO_PREFIXES = [
+  'https://www.amazon.com/gp/video/',
+  'https://www.amazon.co.jp/gp/video/',
+];
+// ウォッチリスト／Prime Video のタブが無い場合に新規で開く既定は amazon.co.jp
+const DEFAULT_WATCHLIST_URL = WATCHLIST_URLS[1];
+
+function watchlistUrlOf(url) {
+  if (!url) return null;
+  return WATCHLIST_URLS.find((u) => url.startsWith(u)) || null;
+}
+
+function domainWatchlistUrl(url) {
+  if (!url) return null;
+  const i = VIDEO_PREFIXES.findIndex((p) => url.startsWith(p));
+  return i >= 0 ? WATCHLIST_URLS[i] : null;
+}
 
 async function findWatchlistTab() {
   const tabs = await chrome.tabs.query({});
-  return tabs.find((t) => t.url && t.url.startsWith(WATCHLIST_URL)) || null;
+  const cands = tabs.filter((t) => watchlistUrlOf(t.url));
+  if (!cands.length) return null;
+  // 今見ているタブを最優先。次に amazon.com（検証で開かれていることが多い）、
+  // 最後に amazon.co.jp の順で選ぶ。
+  const rank = (t) =>
+    (t.active ? 0 : 2) + (watchlistUrlOf(t.url) === WATCHLIST_URLS[0] ? 0 : 1);
+  cands.sort((a, b) => rank(a) - rank(b));
+  return cands[0];
+}
+
+async function findVideoTab() {
+  const tabs = await chrome.tabs.query({});
+  const cands = tabs.filter((t) => domainWatchlistUrl(t.url));
+  if (!cands.length) return null;
+  cands.sort((a, b) => (b.active ? 0 : 1) - (a.active ? 0 : 1));
+  return cands[0];
 }
 
 async function sendStartToTab(tabId, tries = 8) {
@@ -44,10 +81,21 @@ async function openAndScan() {
     await chrome.tabs.reload(existing.id);
     return { ok: true, mode: 'reloaded-tab' };
   }
+  // ウォッチリストのタブは無いが Prime Video のタブがある場合は、
+  // そのタブを同じドメインのウォッチリストへ誘導して使う。
+  const videoTab = await findVideoTab();
+  if (videoTab) {
+    await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: videoTab.id } });
+    await chrome.tabs.update(videoTab.id, { active: true, url: domainWatchlistUrl(videoTab.url) });
+    if (videoTab.windowId) {
+      try { await chrome.windows.update(videoTab.windowId, { focused: true }); } catch (e) {}
+    }
+    return { ok: true, mode: 'navigated-video-tab' };
+  }
   // タブが無い場合は pending フラグを立ててから新規タブで開く。
   // ページ読み込み後に content script がフラグを見て自動で巡回を始める。
   await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: null } });
-  const tab = await chrome.tabs.create({ url: WATCHLIST_URL, active: true });
+  const tab = await chrome.tabs.create({ url: DEFAULT_WATCHLIST_URL, active: true });
   if (tab && tab.id) {
     await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: tab.id } });
   }
@@ -59,7 +107,7 @@ async function openAndScan() {
 // ログインした後に自動でチェックが始まることはしない（pending を取り消す）。
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const url = (changeInfo && changeInfo.url) || (tab && tab.url) || '';
-  if (!url.includes('amazon.co.jp') || !url.includes('/signin')) return;
+  if (!(url.includes('amazon.co.jp') || url.includes('amazon.com')) || !url.includes('/signin')) return;
   try {
     const data = await chrome.storage.local.get('pvPendingScan');
     const pending = data.pvPendingScan;

@@ -30,6 +30,13 @@
 //   目印が同じホバーカード等にある場合に限る。目印のない「今すぐ観る」は
 //   従来通り判定不能（映画など他の文脈での誤判定を防ぐため）。
 //
+// amazon.com 対応（v1.2.5、検証用）:
+//   .com と .co.jp は同じ系列の Web アプリで、ウォッチリストのパスも同一。
+//   判定パターンは英語UIで確認済みのものをそのまま使う。公開資料で .com 側に
+//   存在が示唆された "Watch from Beginning"（最初から観る＝視聴済み側）を追加。
+//   "Watch with Prime"（未加入時等の表示）は候補として拾うだけで判定不能とし、
+//   結果パネルに原文が出るようにして実物での文言確認に使う。
+//
 // 結果はページ内パネルに表示し、chrome.storage.local にも保存して
 // 拡張ポップアップから「前回の結果」として見られるようにする。
 
@@ -81,7 +88,7 @@
     }
     // 英語UI向け（ページの表示言語が英語の場合）。予告編（Play Trailer 等）は
     // どのパターンにも一致しないので自然に判定不能へ落ちる。
-    if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t) || /\bwatch again\b/i.test(t)) {
+    if (/^resume\b/i.test(t) || /\bcontinue watching\b/i.test(t) || /\bwatch again\b/i.test(t) || /\bwatch from beginning\b/i.test(t)) {
       return { status: 'resume', ctaText: t }; // 視聴済み側
     }
     if (/^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
@@ -114,6 +121,8 @@
       || /\bresume\b/i.test(t)
       || /\bcontinue watching\b/i.test(t)
       || /\bwatch again\b/i.test(t)
+      || /\bwatch from beginning\b/i.test(t)
+      || /\bwatch with prime\b/i.test(t) // 判定はしない（候補として拾い、原文を結果に出す）
       || /^play\s+(?:season\s+\d+\s+)?episode\s+\d+\b/i.test(t)
       || /^play\s+s\d+\s*:?\s*e\d+\b/i.test(t)
       || /\bwatch now\b/i.test(t)
@@ -174,7 +183,7 @@
       byId.set(id, {
         id,
         title,
-        href: 'https://www.amazon.co.jp/gp/video/detail/' + id,
+        href: location.origin + '/gp/video/detail/' + id,
         el: container,
         poster: img ? img.src : '',
       });
