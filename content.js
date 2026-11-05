@@ -37,6 +37,13 @@
 //   "Watch with Prime"（未加入時等の表示）は候補として拾うだけで判定不能とし、
 //   結果パネルに原文が出るようにして実物での文言確認に使う。
 //
+// primevideo.com 対応（v1.2.6、検証用）:
+//   primevideo.com は地域パス方式（/region/fe/mystuff/watchlist 等）で、詳細
+//   リンクも /region/<地域>/detail/<id> 形式になる。作品IDの取り出しは
+//   "/detail/" 以降を見るため地域パスでもそのまま動く。結果のリンクは
+//   ページ上の実リンク（link.href）をそのまま使うので、ドメインや地域パスを
+//   仮定しない。判定パターンは .co.jp / .com で確認済みの日英両方を流用する。
+//
 // 結果はページ内パネルに表示し、chrome.storage.local にも保存して
 // 拡張ポップアップから「前回の結果」として見られるようにする。
 
@@ -183,7 +190,7 @@
       byId.set(id, {
         id,
         title,
-        href: location.origin + '/gp/video/detail/' + id,
+        href: link.href,
         el: container,
         poster: img ? img.src : '',
       });

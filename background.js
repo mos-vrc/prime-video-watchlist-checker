@@ -12,28 +12,39 @@ const VIDEO_PREFIXES = [
   'https://www.amazon.com/gp/video/',
   'https://www.amazon.co.jp/gp/video/',
 ];
+// primevideo.com は地域パス方式（/region/<地域>/mystuff/watchlist）。
+// 地域セグメントはアカウントによって変わるため、正規表現で受ける。
+const PV_WATCHLIST_RE = /^https:\/\/www\.primevideo\.com\/region\/[^/]+\/mystuff\/watchlist/;
+const PV_REGION_RE = /^https:\/\/www\.primevideo\.com\/region\/([^/]+)\//;
 // ウォッチリスト／Prime Video のタブが無い場合に新規で開く既定は amazon.co.jp
 const DEFAULT_WATCHLIST_URL = WATCHLIST_URLS[1];
 
 function watchlistUrlOf(url) {
   if (!url) return null;
-  return WATCHLIST_URLS.find((u) => url.startsWith(u)) || null;
+  const hit = WATCHLIST_URLS.find((u) => url.startsWith(u));
+  if (hit) return hit;
+  return PV_WATCHLIST_RE.test(url) ? url : null;
 }
 
 function domainWatchlistUrl(url) {
   if (!url) return null;
   const i = VIDEO_PREFIXES.findIndex((p) => url.startsWith(p));
-  return i >= 0 ? WATCHLIST_URLS[i] : null;
+  if (i >= 0) return WATCHLIST_URLS[i];
+  const m = url.match(PV_REGION_RE);
+  if (m) return 'https://www.primevideo.com/region/' + m[1] + '/mystuff/watchlist';
+  return null;
 }
 
 async function findWatchlistTab() {
   const tabs = await chrome.tabs.query({});
   const cands = tabs.filter((t) => watchlistUrlOf(t.url));
   if (!cands.length) return null;
-  // 今見ているタブを最優先。次に amazon.com（検証で開かれていることが多い）、
-  // 最後に amazon.co.jp の順で選ぶ。
-  const rank = (t) =>
-    (t.active ? 0 : 2) + (watchlistUrlOf(t.url) === WATCHLIST_URLS[0] ? 0 : 1);
+  // 今見ているタブを最優先。次に amazon.com、primevideo.com、amazon.co.jp の順。
+  const rank = (t) => {
+    const u = t.url || '';
+    const surface = u.startsWith(WATCHLIST_URLS[0]) ? 0 : PV_WATCHLIST_RE.test(u) ? 1 : 2;
+    return (t.active ? 0 : 3) + surface;
+  };
   cands.sort((a, b) => rank(a) - rank(b));
   return cands[0];
 }
@@ -107,7 +118,7 @@ async function openAndScan() {
 // ログインした後に自動でチェックが始まることはしない（pending を取り消す）。
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const url = (changeInfo && changeInfo.url) || (tab && tab.url) || '';
-  if (!(url.includes('amazon.co.jp') || url.includes('amazon.com')) || !url.includes('/signin')) return;
+  if (!(url.includes('amazon.co.jp') || url.includes('amazon.com') || url.includes('primevideo.com')) || !url.includes('/signin')) return;
   try {
     const data = await chrome.storage.local.get('pvPendingScan');
     const pending = data.pvPendingScan;
