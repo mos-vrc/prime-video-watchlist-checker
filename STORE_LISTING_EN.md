@@ -4,9 +4,10 @@ English listing texts for "Prime Video Watchlist New Episode Checker", for entry
 
 How to apply: in the Developer Dashboard's Store listing page, use the language selector at the top to add "English" and paste these texts. The extension package itself already ships `_locales/en`, so its name/description/UI follow the browser's display language automatically.
 
-## Item name (matches manifest `name` in the en locale)
+## Item name
 
-Prime Video Watchlist New Episode Checker
+- Store display title (set in the dashboard's title field): Prime Video Watchlist New Episode Checker [JP/EN]
+- Manifest name (the extension's own name): Prime Video Watchlist New Episode Checker (no [JP/EN] suffix; only the store display title differs)
 
 ## Summary (matches manifest `description` in the en locale)
 
@@ -31,7 +32,7 @@ Each title is classified by the play-button label shown when you hover over it:
 
 ■ How to use
 1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
-2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup (default: Auto = the site you checked last time)
+2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup or the results panel (default: Auto = the site you checked last time)
 3. Results appear in a panel on the page and in the extension popup, grouped into "Has unwatched episodes", "Started / Resume", and "Couldn't tell"
 4. Click a title to go straight to its page
 
