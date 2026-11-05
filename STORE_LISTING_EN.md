@@ -6,8 +6,8 @@ How to apply: in the Developer Dashboard's Store listing page, use the language 
 
 ## Item name
 
-- The store display title is taken from the package title (the manifest name) and cannot be changed in the dashboard (verified 2026-11-05). From v1.2.11 the extension name itself therefore carries the suffix: Prime Video Watchlist New Episode Checker [JP/EN]
-- The brand line inside the panel/popup ("▶Prime Video Watchlist New Episode Checker") intentionally does NOT carry the suffix (separate brandName i18n key).
+- The store display title is taken from the package title (the manifest name) and cannot be changed in the dashboard (verified 2026-11-05).
+- Current name: Prime Video Watchlist New Episode Checker (no language suffix; supported languages are stated in the description instead)
 
 ## Summary (matches manifest `description` in the en locale)
 
