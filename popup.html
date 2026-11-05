@@ -8,6 +8,11 @@
   #start:hover { background: #2E8BFF; }
   #note { font-size: 12px; color: #c7d5e0; margin: 8px 0 0; }
   #note:empty { display: none; }
+  #surface-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: #c7d5e0; }
+  #surface-row label { white-space: nowrap; }
+  #surface { flex: 1; min-width: 0; background: #22303c; color: #fff; border: 1px solid #3a4a58; border-radius: 6px; padding: 4px; font-size: 12px; }
+  #surface-note { font-size: 11px; color: #9db4c4; margin: 6px 0 0; }
+  #surface-note:empty { display: none; }
   h2 { font-size: 13px; margin: 12px 0 4px; color: #7ee2a8; }
   #results > h2:first-of-type { margin-top: 8px; }
   h2.sub { color: #9db4c4; }
@@ -23,6 +28,16 @@
 </head>
 <body>
   <button id="start" type="button">ウォッチリストをチェック</button>
+  <div id="surface-row">
+    <label id="surface-label" for="surface">開くウォッチリスト</label>
+    <select id="surface">
+      <option value="auto">自動（前回と同じ）</option>
+      <option value="cojp">amazon.co.jp</option>
+      <option value="com">amazon.com</option>
+      <option value="pv">primevideo.com</option>
+    </select>
+  </div>
+  <p id="surface-note"></p>
   <p id="note"></p>
   <div id="results"></div>
   <p id="meta"></p>

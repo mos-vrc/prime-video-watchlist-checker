@@ -16,8 +16,35 @@ const VIDEO_PREFIXES = [
 // 地域セグメントはアカウントによって変わるため、正規表現で受ける。
 const PV_WATCHLIST_RE = /^https:\/\/www\.primevideo\.com\/region\/[^/]+\/mystuff\/watchlist/;
 const PV_REGION_RE = /^https:\/\/www\.primevideo\.com\/region\/([^/]+)\//;
-// ウォッチリスト／Prime Video のタブが無い場合に新規で開く既定は amazon.co.jp
-const DEFAULT_WATCHLIST_URL = WATCHLIST_URLS[1];
+
+function pvWatchlistFromUrl(url) {
+  if (!url) return null;
+  const m = String(url).match(PV_REGION_RE);
+  return m ? 'https://www.primevideo.com/region/' + m[1] + '/mystuff/watchlist' : null;
+}
+
+// タブが無い場合に新規で開く先を決める（v1.2.7）。
+// 優先順位: ポップアップでの明示設定 (pvSurfacePref) > 前回のチェック面 > ブラウザ表示言語での推測。
+// primevideo.com は地域が分からないとウォッチリストへ直接は開けないため、
+// 地域の記録が無い場合はトップを開き、利用者が Watchlist へ進んだ時点で
+// pending フラグ経由で自動開始する（content script 側の仕組み）。
+async function resolveNewTabUrl() {
+  let pref = 'auto';
+  let lastUrl = null;
+  try {
+    const data = await chrome.storage.local.get(['pvSurfacePref', 'pvLastScan']);
+    pref = data.pvSurfacePref || 'auto';
+    lastUrl = (data.pvLastScan && data.pvLastScan.url) || null;
+  } catch (e) { /* noop */ }
+  if (pref === 'cojp') return WATCHLIST_URLS[1];
+  if (pref === 'com') return WATCHLIST_URLS[0];
+  if (pref === 'pv') return pvWatchlistFromUrl(lastUrl) || 'https://www.primevideo.com/';
+  // auto: 前回と同じ面（primevideo.com は地域つきで復元される）
+  const remembered = domainWatchlistUrl(lastUrl);
+  if (remembered) return remembered;
+  const lang = (chrome.i18n.getUILanguage() || '').toLowerCase();
+  return lang.startsWith('ja') ? WATCHLIST_URLS[1] : WATCHLIST_URLS[0];
+}
 
 function watchlistUrlOf(url) {
   if (!url) return null;
@@ -105,8 +132,10 @@ async function openAndScan() {
   }
   // タブが無い場合は pending フラグを立ててから新規タブで開く。
   // ページ読み込み後に content script がフラグを見て自動で巡回を始める。
+  // 開く先は resolveNewTabUrl（設定 > 前回の面 > 表示言語で推測）。
+  const target = await resolveNewTabUrl();
   await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: null } });
-  const tab = await chrome.tabs.create({ url: DEFAULT_WATCHLIST_URL, active: true });
+  const tab = await chrome.tabs.create({ url: target, active: true });
   if (tab && tab.id) {
     await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: tab.id } });
   }

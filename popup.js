@@ -7,10 +7,29 @@ const noteEl = document.getElementById('note');
 const resultsEl = document.getElementById('results');
 const metaEl = document.getElementById('meta');
 const startBtn = document.getElementById('start');
+const surfaceSel = document.getElementById('surface');
+const surfaceNoteEl = document.getElementById('surface-note');
 
 document.documentElement.lang = chrome.i18n.getUILanguage();
 startBtn.textContent = msg('popupStartButton');
 document.getElementById('brand').textContent = '▶' + msg('appName');
+document.getElementById('surface-label').textContent = msg('surfaceLabel');
+surfaceSel.querySelector('option[value="auto"]').textContent = msg('surfaceAuto');
+
+// 開く先の設定（v1.2.7）。値の意味は background.js の resolveNewTabUrl と対応:
+// auto = 前回の面（無ければ表示言語で推測） / cojp / com / pv = 明示指定。
+let lastScanUrl = null;
+
+function updateSurfaceNote() {
+  // primevideo.com を選んでいて地域の記録がまだ無いときだけ初回案内を出す
+  const regionKnown = !!lastScanUrl && /primevideo\.com\/region\/[^/]+\//.test(lastScanUrl);
+  surfaceNoteEl.textContent = surfaceSel.value === 'pv' && !regionKnown ? msg('surfacePvNote') : '';
+}
+
+surfaceSel.addEventListener('change', async () => {
+  try { await chrome.storage.local.set({ pvSurfacePref: surfaceSel.value }); } catch (e) { /* noop */ }
+  updateSurfaceNote();
+});
 
 startBtn.addEventListener('click', async () => {
   noteEl.textContent = msg('popupStarting');
@@ -29,6 +48,9 @@ startBtn.addEventListener('click', async () => {
 function render(data) {
   const scan = data.pvLastScan;
   const state = data.pvScanState;
+  lastScanUrl = (scan && scan.url) || null;
+  if (data.pvSurfacePref) surfaceSel.value = data.pvSurfacePref;
+  updateSurfaceNote();
   if (data.pvNotice && Date.now() - data.pvNotice.at < 10 * 60 * 1000 && !noteEl.textContent) {
     noteEl.textContent = data.pvNotice.text;
   }
@@ -95,4 +117,4 @@ function render(data) {
   metaEl.textContent = msg('popupLastCheck', [new Date(scan.at).toLocaleString(chrome.i18n.getUILanguage())]);
 }
 
-chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice']).then(render).catch(() => {});
+chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice', 'pvSurfacePref']).then(render).catch(() => {});
