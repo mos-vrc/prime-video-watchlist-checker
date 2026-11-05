@@ -18,6 +18,8 @@ This extension automatically checks the titles on your Amazon Prime Video watchl
 
 On Prime Video, a watchlist doesn't tell you when a new episode arrives — you only find out by opening each title. This extension scans your watchlist for you and judges each title's viewing state from the label of the play button shown on hover.
 
+Note: Only the Japanese and English Prime Video interfaces are supported. Titles cannot be classified when the interface is set to another language.
+
 ■ How it decides
 Each title is classified by the play-button label shown when you hover over it:
 ・"Resume" (e.g. "Resume S3 E5") → already started
@@ -28,8 +30,8 @@ Each title is classified by the play-button label shown when you hover over it:
 (Japanese UI labels are supported too: 「〜の続きを観る」→ started, 「エピソード○を再生」→ unwatched.)
 
 ■ How to use
-1. Sign in to amazon.co.jp and press "Check my watchlist" from the extension icon
-2. The watchlist tab opens and the scan starts automatically (about 1 second per title)
+1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
+2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup (default: Auto = the site you checked last time)
 3. Results appear in a panel on the page and in the extension popup, grouped into "Has unwatched episodes", "Started / Resume", and "Couldn't tell"
 4. Click a title to go straight to its page
 
@@ -37,7 +39,8 @@ Each title is classified by the play-button label shown when you hover over it:
 Results are stored only inside your browser and are never sent to any server. The extension does not collect account information or viewing history. It uses your browser's existing signed-in session and never reads your ID, password, or cookies.
 
 ■ Notes
-・Works only with Prime Video on amazon.co.jp
+・Works with Prime Video on amazon.co.jp, amazon.com, and primevideo.com
+・Only the Japanese and English interface languages are supported
 ・This is an unofficial tool and is not affiliated with Amazon.com, Inc. or its affiliates
 ・If you stopped an episode partway, the button keeps saying "Resume", so a newer episode beyond it cannot be detected
 ・If Prime Video changes its page layout, the extension may stop working until updated
@@ -49,8 +52,8 @@ To scan the user's Amazon Prime Video watchlist and list the titles that have un
 ## Permission justifications (for the dashboard)
 
 - tabs: Used to find and focus the watchlist tab and to send it the scan-start message. Tab URLs are read only to identify the watchlist tab.
-- storage: Used to save the latest check results and scan state inside the browser (chrome.storage.local) so the popup can show the previous results. Nothing is sent anywhere.
-- Host permission (https://www.amazon.co.jp/gp/video/*): Used to run the content script only on the watchlist page and read the hover play-button labels of title cards. The extension does not run on any other pages.
+- storage: Used to save the latest check results, the scan state, and the "Watchlist to open" choice from the popup inside the browser (chrome.storage.local), so the popup can show the previous results and the check can open the right site. Nothing is sent anywhere.
+- Host permissions (https://www.amazon.co.jp/gp/video/*, https://www.amazon.com/gp/video/*, https://www.primevideo.com/*): Used to run the content script only on the watchlist pages of the supported sites and read the hover play-button labels of title cards. The extension does not run on any other pages.
 
 ## Data-use declarations (Privacy practices, for the dashboard)
 
