@@ -12,7 +12,7 @@ const surfaceNoteEl = document.getElementById('surface-note');
 
 document.documentElement.lang = chrome.i18n.getUILanguage();
 startBtn.textContent = msg('popupStartButton');
-document.getElementById('brand').textContent = '▶' + msg('appName');
+document.getElementById('brand').textContent = '▶' + msg('brandName');
 document.getElementById('surface-label').textContent = msg('surfaceLabel');
 surfaceSel.querySelector('option[value="auto"]').textContent = msg('surfaceAuto');
 

@@ -383,7 +383,7 @@
       <div class="pv-section pv-unwatched"><h4>${msg('headingUnwatched', ['0'])}</h4><ul></ul></div>
       <div class="pv-section pv-resume"><h4>${msg('headingResume', ['0'])}</h4><ul></ul></div>
       <div class="pv-section pv-unknown"><h4>${msg('headingUnknown', ['0'])}</h4><ul></ul></div>
-      <div class="pv-brand">▶${msg('appName')}</div>
+      <div class="pv-brand">▶${msg('brandName')}</div>
     `;
     document.body.appendChild(panel);
     panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
