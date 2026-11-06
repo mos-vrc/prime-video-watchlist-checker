@@ -792,6 +792,32 @@
     return best;
   }
 
+  // ページのタイトル（document.title）から作品名を取り出して照合する
+  // （v1.2.22）。詳細ページのタイトルは「Amazon.co.jp: ○○を観る |
+  // Prime Video」の形で、再生を始めた直後でも必ず読める。プレイヤーの
+  // オーバーレイはマウスを動かすまで作品名が出ないことがあるため、
+  // あちらの照合が外れたときの本命はこちら。
+  function titleFromDocumentTitle() {
+    let t = String(document.title || '');
+    t = t.replace(/^Amazon\.[^:\s]+:\s*/, '').replace(/^Prime Video\s*[:：]\s*/i, '');
+    t = t.replace(/\s*を観る\s*\|.*$/, '').replace(/\s*\|\s*Prime Video.*$/i, '').replace(/\s*-\s*Prime Video.*$/i, '');
+    return normalizeText(t);
+  }
+
+  async function matchByPageTitle() {
+    try {
+      const dt = titleFromDocumentTitle();
+      if (!dt || dt.length < 2) return null;
+      const d = await chrome.storage.local.get('pvLastScan');
+      const results = (d.pvLastScan && d.pvLastScan.results) || [];
+      const unwatched = results.filter((r) => r && r.status === 'unwatched' && r.title);
+      const exact = unwatched.filter((r) => normalizeText(r.title) === dt);
+      if (exact.length === 1) return exact[0].id;
+      const incl = unwatched.filter((r) => dt.includes(normalizeText(r.title)));
+      return incl.length === 1 ? incl[0].id : null;
+    } catch (e) { return null; }
+  }
+
   // プレイヤー表示の中に出ている作品名から、未視聴ありの作品を特定する
   // （v1.2.18）。クリック経路で作品を特定できない場合の受け皿で、候補が
   // ちょうど1件のときだけ採用する。
@@ -843,13 +869,19 @@
   // 自動移動の成否・見送り理由を残す記録（ポップアップで見られる）。
   // 「動かない」報告のときに、何を見てどう判断したかを後から追えるように
   // するためのもの（v1.2.19）。最新30件だけを保持する。
-  async function logFlip(entry) {
-    try {
-      const d = await chrome.storage.local.get('pvFlipLog');
-      const log = Array.isArray(d.pvFlipLog) ? d.pvFlipLog : [];
-      log.push({ t: Date.now(), ...entry });
-      await chrome.storage.local.set({ pvFlipLog: log.slice(-30) });
-    } catch (e) { /* noop */ }
+  // 書き込みを直列化する（v1.2.22）: 読み→追記→保存を並行に走らせると、
+  // ほぼ同時に起きた記録同士が上書きし合って片方が消えるため
+  let pvLogChain = Promise.resolve();
+  function logFlip(entry) {
+    pvLogChain = pvLogChain.then(async () => {
+      try {
+        const d = await chrome.storage.local.get('pvFlipLog');
+        const log = Array.isArray(d.pvFlipLog) ? d.pvFlipLog : [];
+        log.push({ t: Date.now(), ...entry });
+        await chrome.storage.local.set({ pvFlipLog: log.slice(-30) });
+      } catch (e) { /* noop */ }
+    });
+    return pvLogChain;
   }
 
   const pvResolvedVideos = new WeakSet(); // 決着済みの video（再判定しない）
@@ -873,6 +905,7 @@
     pvResolvedVideos.add(v);
     (async () => {
       let candidate = await matchTitleInPlayer(v);
+      if (!candidate) candidate = await matchByPageTitle();
       if (!candidate && pvArmedDetailId) {
         candidate = pvArmedDetailId;
         pvArmedDetailId = null;
