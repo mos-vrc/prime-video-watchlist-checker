@@ -115,7 +115,8 @@ function render(data) {
       li.appendChild(a);
       const span = document.createElement('span');
       span.className = 'cta';
-      span.textContent = r.ctaText || msg('ctaNotFound');
+      // 自動で視聴済み側へ移動した作品は「再生済み」と出す（v1.2.17）
+      span.textContent = r.flipped ? msg('playedLabel') : (r.ctaText || msg('ctaNotFound'));
       li.appendChild(span);
       ul.appendChild(li);
     }

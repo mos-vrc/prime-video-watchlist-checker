@@ -427,6 +427,12 @@
     panel.querySelector('.pv-status').textContent = text;
   }
 
+  // 自動で視聴済み側へ移動した作品は、チェック時に観測した文言ではなく
+  // 「再生済み」と出す（観測してない「続きを観る」文言を作らないため、v1.2.17）
+  function subLabel(r) {
+    return r.flipped ? msg('playedLabel') : r.ctaText;
+  }
+
   function renderResults() {
     const panel = ensurePanel();
     const groups = { unwatched: [], resume: [], unknown: [] };
@@ -451,8 +457,8 @@
         ul.appendChild(li);
       }
     };
-    fill('.pv-unwatched', 'headingUnwatched', groups.unwatched, (r) => r.ctaText);
-    fill('.pv-resume', 'headingResume', groups.resume, (r) => r.ctaText);
+    fill('.pv-unwatched', 'headingUnwatched', groups.unwatched, (r) => subLabel(r));
+    fill('.pv-resume', 'headingResume', groups.resume, (r) => subLabel(r));
     fill('.pv-unknown', 'headingUnknown', groups.unknown, (r) => (r.ctaText ? msg('panelButtonPrefix', [r.ctaText]) : msg('ctaNotFound')));
   }
 
@@ -745,6 +751,7 @@
       const r = scan.results.find((x) => x && x.id === id);
       if (!r || r.status !== 'unwatched') return;
       r.status = 'resume';
+      r.flipped = true; // 自動で移動した印。表示側は観測文言ではなく「再生済み」と出す（v1.2.17）
       // at（最終チェック時刻）は据え置く。チェックした事実は変わらないため。
       await chrome.storage.local.set({ pvLastScan: scan });
     } catch (e) { /* noop */ }
