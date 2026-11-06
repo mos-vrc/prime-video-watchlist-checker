@@ -971,19 +971,24 @@
     if (pvArmedDetailId && urlId === pvArmedDetailId && (clickAge < 10 * 1000 || !v.muted)) {
       const id = pvArmedDetailId;
       pvArmedDetailId = null;
+      // 先に決着済みにしておく（v1.2.24）: 'play' と 'playing' の両イベントが
+      // ほぼ同時に来るため、非同期の移動が終わる前にもう一方のイベントが
+      // 二重に処理を走らせ、記録に「移動した」と「未視聴ありに無かった」が
+      // 対で残ってしまっていた。ID が結果に無い場合だけ決着を取り消して
+      // 通常フローへ回す。
+      pvResolvedVideos.add(v);
       flipToWatched(id).then((res) => {
         if (res.done) {
-          pvResolvedVideos.add(v);
           logFlip({ decision: 'flipped', id, title: res.title, ...base });
           return;
         }
         if (res.found) {
-          pvResolvedVideos.add(v);
           logFlip({ decision: 'skip', reason: 'not-unwatched', id, title: res.title, ...base });
           return;
         }
         // その ID の作品が結果に無い（ID 形式がカード側と違う等）:
         // あきらめずに通常の特定フロー（作品名の照合など）へ回す（v1.2.21）
+        pvResolvedVideos.delete(v);
         logFlip({ decision: 'skip', reason: 'unknown-id', id, ...base });
         resolveBigVideo(v, via, base);
       });
