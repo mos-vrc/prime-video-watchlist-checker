@@ -78,11 +78,13 @@ function domainWatchlistUrl(url) {
   return null;
 }
 
-async function findWatchlistTab(pref) {
+async function findWatchlistTab(pref, windowId) {
   const tabs = await chrome.tabs.query({});
   // 明示設定がある場合は、その面のタブだけを再利用する（v1.2.8）。
   // v1.2.7 ではここが設定を見ておらず、別面のタブが開いていると設定を無視して再利用していた。
-  const cands = tabs.filter((t) => watchlistUrlOf(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref));
+  // v1.2.13: ウィンドウが特定できる場合は、そのウィンドウ内のタブだけを対象にする
+  // （別ウィンドウのタブを奪わない）。特定できない場合のみ全体から探す。
+  const cands = tabs.filter((t) => watchlistUrlOf(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref) && (windowId == null || t.windowId === windowId));
   if (!cands.length) return null;
   // 今見ているタブを最優先。次に amazon.com、primevideo.com、amazon.co.jp の順。
   const rank = (t) => {
@@ -94,9 +96,9 @@ async function findWatchlistTab(pref) {
   return cands[0];
 }
 
-async function findVideoTab(pref) {
+async function findVideoTab(pref, windowId) {
   const tabs = await chrome.tabs.query({});
-  const cands = tabs.filter((t) => domainWatchlistUrl(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref));
+  const cands = tabs.filter((t) => domainWatchlistUrl(t.url) && (pref === 'auto' || surfaceOfUrl(t.url) === pref) && (windowId == null || t.windowId === windowId));
   if (!cands.length) return null;
   cands.sort((a, b) => (b.active ? 0 : 1) - (a.active ? 0 : 1));
   return cands[0];
@@ -122,10 +124,21 @@ async function sendStartToTab(tabId, tries = 8) {
   return false;
 }
 
-async function openAndScan() {
+async function openAndScan(callerWindowId) {
   // 明示設定はタブの再利用・誘導・新規タブのすべてに優先する（v1.2.8）
   const pref = await getSurfacePref();
-  const existing = await findWatchlistTab(pref);
+  // チェックは「押したウィンドウ」の中で完結させる（v1.2.13）。
+  // ポップアップが伝えてきたウィンドウを最優先し、取れない場合は最後に
+  // フォーカスされていたウィンドウで代用する。どちらも取れない場合のみ
+  // ウィンドウを限定せずに従来どおり全体から探す。
+  let winId = callerWindowId != null ? callerWindowId : null;
+  if (winId == null) {
+    try {
+      const w = await chrome.windows.getLastFocused();
+      winId = w && w.id != null ? w.id : null;
+    } catch (e) { /* noop */ }
+  }
+  const existing = await findWatchlistTab(pref, winId);
   if (existing) {
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId) {
@@ -141,7 +154,7 @@ async function openAndScan() {
   }
   // ウォッチリストのタブは無いが Prime Video のタブがある場合は、
   // そのタブを同じドメインのウォッチリストへ誘導して使う。
-  const videoTab = await findVideoTab(pref);
+  const videoTab = await findVideoTab(pref, winId);
   if (videoTab) {
     await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: videoTab.id } });
     await chrome.tabs.update(videoTab.id, { active: true, url: domainWatchlistUrl(videoTab.url) });
@@ -155,7 +168,9 @@ async function openAndScan() {
   // 開く先は resolveNewTabUrl（設定 > 前回の面 > 表示言語で推測）。
   const target = await resolveNewTabUrl(pref);
   await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: null } });
-  const tab = await chrome.tabs.create({ url: target, active: true });
+  const createProps = { url: target, active: true };
+  if (winId != null) createProps.windowId = winId;
+  const tab = await chrome.tabs.create(createProps);
   if (tab && tab.id) {
     await chrome.storage.local.set({ pvPendingScan: { at: Date.now(), tabId: tab.id } });
   }
@@ -185,7 +200,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'pv-open-and-scan') {
-    openAndScan()
+    openAndScan(msg.windowId != null ? msg.windowId : null)
       .then((r) => sendResponse(r))
       .catch((e) => sendResponse({ ok: false, error: String(e && e.message ? e.message : e) }));
     return true; // async response

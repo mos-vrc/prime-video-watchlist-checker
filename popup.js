@@ -34,7 +34,14 @@ surfaceSel.addEventListener('change', async () => {
 startBtn.addEventListener('click', async () => {
   noteEl.textContent = msg('popupStarting');
   try {
-    const res = await chrome.runtime.sendMessage({ type: 'pv-open-and-scan' });
+    // 自分が開かれているウィンドウを background に伝える（v1.2.13）。
+    // チェックはこのウィンドウの中で完結させるため。
+    let windowId = null;
+    try {
+      const w = await chrome.windows.getCurrent();
+      windowId = w && w.id != null ? w.id : null;
+    } catch (e) { /* noop */ }
+    const res = await chrome.runtime.sendMessage({ type: 'pv-open-and-scan', windowId });
     if (res && res.ok) {
       noteEl.textContent = msg('popupStarted');
     } else {
