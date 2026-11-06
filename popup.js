@@ -83,6 +83,7 @@ function renderFlipLog(log) {
     else if (en.reason === 'no-intent') span.textContent = msg('flipSkipNoIntent');
     else if (en.reason === 'no-candidate') span.textContent = msg('flipSkipNoCandidate');
     else if (en.reason === 'not-unwatched') span.textContent = msg('flipSkipNotUnwatched');
+    else if (en.reason === 'unknown-id') span.textContent = msg('flipSkipUnknownId');
     else span.textContent = en.reason || '';
     li.appendChild(span);
     ul.appendChild(li);
@@ -123,7 +124,8 @@ diagBtn.addEventListener('click', async () => {
       lines.push('at: ' + new Date(scan.at).toLocaleString('ja-JP'));
       lines.push('url: ' + scan.url);
       for (const r of scan.results || []) {
-        lines.push([r.status, r.flipped ? 'flipped' : '-', JSON.stringify(r.title), JSON.stringify(r.ctaText || ''), r.id].join(' | '));
+        lines.push([r.status, r.flipped ? 'flipped' : '-', JSON.stringify(r.title), JSON.stringify(r.ctaText || ''), r.id].join(' | ')
+          + (Array.isArray(r.altIds) && r.altIds.length ? ' | alt: ' + r.altIds.join(',') : ''));
       }
     } else {
       lines.push('(none)');

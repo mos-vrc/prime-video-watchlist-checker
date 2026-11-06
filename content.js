@@ -587,6 +587,35 @@
       result = { id: card.id, title: card.title, href: card.href, poster: card.poster, status: 'unknown', ctaText: '' };
     }
 
+    // この作品の別 ID を集める（v1.2.21）。Prime では同じ作品に ASIN 形式と
+    // GTI 形式の2種類の ID があり、カードのリンクは ASIN でも、再生ボタン
+    // 経由の遷移先は GTI 形式になることがある（実例あり）。ホバー中の
+    // ポータルやカード内に出ている /detail/ リンクから拾って保存し、
+    // 自動移動の照合で両方使えるようにする。関係ない作品の ID を拾わない
+    // よう、リンクの種類が増えすぎる階層では打ち切る。
+    let altIds = new Set();
+    const collectIds = (root, into) => {
+      if (!root || !root.querySelectorAll) return;
+      for (const a of root.querySelectorAll('a[href*="/detail/"]')) {
+        const xid = extractTitleId(a.getAttribute('href'));
+        if (xid) into.add(xid);
+      }
+    };
+    collectIds(card.el, altIds);
+    if (found) {
+      let n = found.el;
+      for (let depth = 0; depth < 8 && n && n !== document.body; depth++) {
+        const atLevel = new Set();
+        collectIds(n, atLevel);
+        const merged = new Set([...altIds, ...atLevel]);
+        if (merged.size > 4) break;
+        altIds = merged;
+        n = n.parentElement;
+      }
+    }
+    altIds.delete(card.id);
+    if (altIds.size) result.altIds = [...altIds].slice(0, 4);
+
     for (const t of hoverTargets) dispatchHover(t, false);
     debug.status = result.status;
     debugLog.push(debug);
@@ -791,21 +820,24 @@
     } catch (e) { return null; }
   }
 
-  // flipToWatched の結果は {done, title} で返し、記録（pvFlipLog）に使う
+  // flipToWatched の結果は {done, found, title} で返す（記録と振り分け用）。
+  // found=false は「その ID の作品が結果に無い」= ID 形式が違う可能性が高い。
   async function flipToWatched(id) {
     try {
       const d = await chrome.storage.local.get('pvLastScan');
       const scan = d.pvLastScan;
-      if (!scan || !Array.isArray(scan.results)) return { done: false, title: null };
-      const r = scan.results.find((x) => x && x.id === id);
-      if (!r) return { done: false, title: null };
-      if (r.status !== 'unwatched') return { done: false, title: r.title || null };
+      if (!scan || !Array.isArray(scan.results)) return { done: false, found: false, title: null };
+      // 完全一致を先に探し、無ければ別 ID（altIds）で探す（v1.2.21）
+      let r = scan.results.find((x) => x && x.id === id);
+      if (!r) r = scan.results.find((x) => x && Array.isArray(x.altIds) && x.altIds.includes(id));
+      if (!r) return { done: false, found: false, title: null };
+      if (r.status !== 'unwatched') return { done: false, found: true, title: r.title || null };
       r.status = 'resume';
       r.flipped = true; // 自動で移動した印。表示側は観測文言ではなく「再生済み」と出す（v1.2.17）
       // at（最終チェック時刻）は据え置く。チェックした事実は変わらないため。
       await chrome.storage.local.set({ pvLastScan: scan });
-      return { done: true, title: r.title || null };
-    } catch (e) { return { done: false, title: null }; }
+      return { done: true, found: true, title: r.title || null };
+    } catch (e) { return { done: false, found: false, title: null }; }
   }
 
   // 自動移動の成否・見送り理由を残す記録（ポップアップで見られる）。
@@ -823,40 +855,21 @@
   const pvResolvedVideos = new WeakSet(); // 決着済みの video（再判定しない）
   const pvLoggedVideos = new WeakSet();   // 見送り理由を記録済みの video
 
-  // 再生中の video に対する判定本体。'playing'/'play' イベントと、2.5秒
-  // ごとの見回り（poll）の両方から呼ばれる（v1.2.19で一本化）。
-  // 見回りが必要な理由: ページ遷移直後にミュートで自動開始した再生は、
-  // イベント時点では「本人の操作」と判定できず、その後に音を出す操作を
-  // しても 'playing' は二度と発火しないため、イベントだけでは拾えない。
-  function handlePlayingVideo(v, via) {
-    if (!v || v.tagName !== 'VIDEO' || pvResolvedVideos.has(v)) return;
+  function logSkipOnceFor(v, reason, base) {
+    if (pvLoggedVideos.has(v)) return;
+    pvLoggedVideos.add(v);
+    logFlip({ decision: 'skip', reason, ...base });
+  }
+
+  // 大きい video（本編プレイヤー）の候補特定と移動（v1.2.21で分離）
+  function resolveBigVideo(v, via, base) {
+    if (pvResolvedVideos.has(v)) return;
     const clickAge = pvLastClickAt > 0 ? Date.now() - pvLastClickAt : Infinity;
-    const urlId = extractTitleId(location.href);
-    const big = isPlayerVideo(v) || videoContextCoverage(v) >= 0.5;
-    const base = { via, muted: !!v.muted, big };
-    const logSkipOnce = (reason) => {
-      if (pvLoggedVideos.has(v)) return;
-      pvLoggedVideos.add(v);
-      logFlip({ decision: 'skip', reason, ...base });
-    };
-    // 詳細ページ（URL に作品 ID が残っている間）: 厳しめ判定（従来どおり）。
-    // 小さい video（ヒーロー枠の予告編など）でも、ここだけは対象にする。
-    if (pvArmedDetailId && urlId === pvArmedDetailId && (clickAge < 10 * 1000 || !v.muted)) {
-      pvResolvedVideos.add(v);
-      const id = pvArmedDetailId;
-      pvArmedDetailId = null;
-      flipToWatched(id).then((res) => {
-        logFlip(res.done
-          ? { decision: 'flipped', title: res.title, ...base }
-          : { decision: 'skip', reason: 'not-unwatched', title: res.title, ...base });
-      });
-      return;
-    }
-    if (!big) { logSkipOnce('small'); return; }
+    if (!base.big) { logSkipOnceFor(v, 'small', base); return; }
     // 本編プレイヤー: 本人の操作らしいかどうか。イベント経由は60秒、
     // 見回り経由は120秒まで遡る（音を出す操作が遅れて来る場合があるため）
     const intentWindow = via === 'poll' ? 120 * 1000 : 60 * 1000;
-    if (!(clickAge < intentWindow || !v.muted)) { logSkipOnce('no-intent'); return; }
+    if (!(clickAge < intentWindow || !v.muted)) { logSkipOnceFor(v, 'no-intent', base); return; }
     pvResolvedVideos.add(v);
     (async () => {
       let candidate = await matchTitleInPlayer(v);
@@ -870,15 +883,52 @@
       if (!candidate) {
         // ここで決着させない: 広告の再生中はプレイヤーに作品名が出ず、
         // 本編が始まって初めて特定できることがあるため、見回りで再挑戦する
-        logSkipOnce('no-candidate');
+        logSkipOnceFor(v, 'no-candidate', base);
         pvResolvedVideos.delete(v);
         return;
       }
       const res = await flipToWatched(candidate);
       logFlip(res.done
-        ? { decision: 'flipped', title: res.title, ...base }
-        : { decision: 'skip', reason: 'not-unwatched', title: res.title, ...base });
+        ? { decision: 'flipped', id: candidate, title: res.title, ...base }
+        : { decision: 'skip', reason: res.found ? 'not-unwatched' : 'unknown-id', id: candidate, title: res.title, ...base });
     })();
+  }
+
+  // 再生中の video に対する判定本体。'playing'/'play' イベントと、2.5秒
+  // ごとの見回り（poll）の両方から呼ばれる（v1.2.19で一本化）。
+  // 見回りが必要な理由: ページ遷移直後にミュートで自動開始した再生は、
+  // イベント時点では「本人の操作」と判定できず、その後に音を出す操作を
+  // しても 'playing' は二度と発火しないため、イベントだけでは拾えない。
+  function handlePlayingVideo(v, via) {
+    if (!v || v.tagName !== 'VIDEO' || pvResolvedVideos.has(v)) return;
+    const clickAge = pvLastClickAt > 0 ? Date.now() - pvLastClickAt : Infinity;
+    const urlId = extractTitleId(location.href);
+    const big = isPlayerVideo(v) || videoContextCoverage(v) >= 0.5;
+    const base = { via, muted: !!v.muted, big };
+    // 詳細ページ（URL に作品 ID が残っている間）: 厳しめ判定（従来どおり）。
+    // 小さい video（ヒーロー枠の予告編など）でも、ここだけは対象にする。
+    if (pvArmedDetailId && urlId === pvArmedDetailId && (clickAge < 10 * 1000 || !v.muted)) {
+      const id = pvArmedDetailId;
+      pvArmedDetailId = null;
+      flipToWatched(id).then((res) => {
+        if (res.done) {
+          pvResolvedVideos.add(v);
+          logFlip({ decision: 'flipped', id, title: res.title, ...base });
+          return;
+        }
+        if (res.found) {
+          pvResolvedVideos.add(v);
+          logFlip({ decision: 'skip', reason: 'not-unwatched', id, title: res.title, ...base });
+          return;
+        }
+        // その ID の作品が結果に無い（ID 形式がカード側と違う等）:
+        // あきらめずに通常の特定フロー（作品名の照合など）へ回す（v1.2.21）
+        logFlip({ decision: 'skip', reason: 'unknown-id', id, ...base });
+        resolveBigVideo(v, via, base);
+      });
+      return;
+    }
+    resolveBigVideo(v, via, base);
   }
   document.addEventListener('playing', (e) => handlePlayingVideo(e.target, 'event'), true);
   document.addEventListener('play', (e) => handlePlayingVideo(e.target, 'event'), true);
@@ -915,6 +965,7 @@
       const snap = {
         t: Date.now(),
         url: location.href,
+        pageTitle: document.title || '',
         armed: pvArmedDetailId,
         press: pvLastCardPress.id,
         clickAgeSec: pvLastClickAt > 0 ? Math.round((Date.now() - pvLastClickAt) / 1000) : null,
