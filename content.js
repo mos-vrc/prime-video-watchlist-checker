@@ -683,8 +683,10 @@
   // 「未視聴あり」の作品を再生したら、再チェックなしで保存結果を
   // 「視聴済み側（続きを観る）」に倒す。対象は詳細ページでの再生と、
   // ウォッチリストのプレビューからそのまま始まるページ内プレイヤー。
-  // 予告編の自動再生と区別するため、「直前10秒以内にクリックがある」または
-  // 「ミュートでない」再生だけを本人の再生とみなす。
+  // 予告編の自動再生と区別するため、本人の操作らしい再生だけを対象にする
+  // （小さい video は直前10秒以内のクリック、本編プレイヤーは広告・読み込み
+  // 遅延を見込んで60秒以内に操作があること。どちらもミュートでない再生は
+  // 本人とみなす）。
   // このために content script は Prime Video のページ全体に常駐する
   // （巡回はウォッチリストでのみ行う）。
   const PV_WL_RE = /^https:\/\/www\.primevideo\.com\/region\/[^/]+\/mystuff\/watchlist/;
@@ -743,6 +745,47 @@
     } catch (e) { return false; }
   }
 
+  // video 自身か、その外枠（プレイヤーのコンテナ）が画面のどれだけを
+  // 占めるか。プレイヤーは黒帯の分だけ video 要素が小さいことがあるため、
+  // 祖先の広さも見る（v1.2.18）。
+  function videoContextCoverage(v) {
+    let best = 0;
+    try {
+      let n = v;
+      for (let i = 0; i < 7 && n; i++) {
+        const r = n.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          best = Math.max(best, (r.width * r.height) / (window.innerWidth * window.innerHeight));
+        }
+        n = n.parentElement;
+      }
+    } catch (e) { /* noop */ }
+    return best;
+  }
+
+  // プレイヤー表示の中に出ている作品名から、未視聴ありの作品を特定する
+  // （v1.2.18）。クリック経路で作品を特定できない場合の受け皿で、候補が
+  // ちょうど1件のときだけ採用する。
+  async function matchTitleInPlayer(v) {
+    try {
+      let root = v;
+      let n = v;
+      for (let i = 0; i < 6 && n && n.parentElement; i++) {
+        n = n.parentElement;
+        root = n;
+        const r = n.getBoundingClientRect();
+        if (r.width * r.height >= window.innerWidth * window.innerHeight * 0.5) break;
+      }
+      const text = normalizeText(root.textContent);
+      if (!text) return null;
+      const d = await chrome.storage.local.get('pvLastScan');
+      const results = (d.pvLastScan && d.pvLastScan.results) || [];
+      const hits = results.filter((r) => r && r.status === 'unwatched' && r.title && r.title.length >= 2
+        && text.includes(normalizeText(r.title)));
+      return hits.length === 1 ? hits[0].id : null;
+    } catch (e) { return null; }
+  }
+
   async function flipToWatched(id) {
     try {
       const d = await chrome.storage.local.get('pvLastScan');
@@ -760,18 +803,44 @@
   function onVideoPlaying(e) {
     const v = e.target;
     if (!v || v.tagName !== 'VIDEO') return;
-    const deliberate = Date.now() - pvLastClickAt < 10 * 1000 || !v.muted;
-    if (!deliberate) return;
-    // ページ内プレイヤー（大きな video）: 直前に押されたカードの作品を倒す
-    if (isPlayerVideo(v) && pvLastCardPress.id && Date.now() - pvLastCardPress.at < 30 * 1000) {
-      flipToWatched(pvLastCardPress.id);
-    }
-    // 詳細ページ: URL の作品を倒す
-    if (pvArmedDetailId && extractTitleId(location.href) === pvArmedDetailId) {
+    // 本人の操作かどうかの判定は2段階（v1.2.18で見直し）:
+    //  - 小さい video（詳細ページのヒーロー枠など）: 従来どおり「直前10秒
+    //    以内のクリック」か「ミュートでない」場合だけ。予告編の自動再生は
+    //    ページを開いてすぐ・無操作で始まるので、ここで弾ける。
+    //  - 大きい video（本編プレイヤー）: 再生ボタンを押してから広告や
+    //    読み込みで実際の再生開始が10秒を超えることがあるため、「この
+    //    ページで60秒以内に何か押した」でも本人の再生とみなす。
+    const clickedRecently = pvLastClickAt > 0 && Date.now() - pvLastClickAt < 10 * 1000;
+    const clickedThisPage = pvLastClickAt > 0 && Date.now() - pvLastClickAt < 60 * 1000;
+    const urlId = extractTitleId(location.href);
+    // 詳細ページ（URL に作品 ID が残っている間）: 従来どおりの厳しめ判定
+    if (pvArmedDetailId && urlId === pvArmedDetailId && (clickedRecently || !v.muted)) {
       const id = pvArmedDetailId;
       pvArmedDetailId = null;
       flipToWatched(id);
+      return;
     }
+    const big = isPlayerVideo(v) || videoContextCoverage(v) >= 0.5;
+    if (!big) return;
+    if (!(clickedThisPage || !v.muted)) return;
+    // ここから先は非同期で候補を解決する
+    (async () => {
+      // プレイヤー表示の中の作品名で特定できれば、それが一番確実
+      const byText = await matchTitleInPlayer(v);
+      if (byText) { flipToWatched(byText); return; }
+      // 詳細ページから来た場合は、控えておいた作品 ID
+      // （プレイヤー画面では URL から作品 ID が消えることがあるため）
+      if (pvArmedDetailId) {
+        const id = pvArmedDetailId;
+        pvArmedDetailId = null;
+        flipToWatched(id);
+        return;
+      }
+      // 一覧で直前に押されたカード
+      if (pvLastCardPress.id && Date.now() - pvLastCardPress.at < 120 * 1000) {
+        flipToWatched(pvLastCardPress.id);
+      }
+    })();
   }
   document.addEventListener('playing', onVideoPlaying, true);
 
