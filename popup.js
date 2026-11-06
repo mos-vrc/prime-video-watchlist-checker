@@ -8,7 +8,9 @@ const resultsEl = document.getElementById('results');
 const metaEl = document.getElementById('meta');
 const flipLogEl = document.getElementById('fliplog');
 const debugToggle = document.getElementById('debug-toggle');
-document.getElementById('debug-label').textContent = msg('debugToggleLabel');
+if (debugToggle) {
+  document.getElementById('debug-label').textContent = msg('debugToggleLabel');
+}
 const startBtn = document.getElementById('start');
 const surfaceSel = document.getElementById('surface');
 const surfaceNoteEl = document.getElementById('surface-note');
@@ -163,22 +165,24 @@ function applyDebugVisibility(on, log) {
   diagBtn.style.display = on ? '' : 'none';
   if (on) renderFlipLog(log);
 }
-debugToggle.addEventListener('change', async () => {
-  const on = debugToggle.checked;
-  try { await chrome.storage.local.set({ pvDebug: on }); } catch (e) { /* noop */ }
-  if (on) {
-    try {
-      const d = await chrome.storage.local.get('pvFlipLog');
-      applyDebugVisibility(true, d.pvFlipLog);
-    } catch (e) { applyDebugVisibility(true, null); }
-  } else {
-    applyDebugVisibility(false, null);
-  }
-});
+if (debugToggle) {
+  debugToggle.addEventListener('change', async () => {
+    const on = debugToggle.checked;
+    try { await chrome.storage.local.set({ pvDebug: on }); } catch (e) { /* noop */ }
+    if (on) {
+      try {
+        const d = await chrome.storage.local.get('pvFlipLog');
+        applyDebugVisibility(true, d.pvFlipLog);
+      } catch (e) { applyDebugVisibility(true, null); }
+    } else {
+      applyDebugVisibility(false, null);
+    }
+  });
+}
 
 function render(data) {
   const debugOn = !!data.pvDebug;
-  debugToggle.checked = debugOn;
+  if (debugToggle) debugToggle.checked = debugOn;
   applyDebugVisibility(debugOn, data.pvFlipLog);
   const scan = data.pvLastScan;
   const state = data.pvScanState;

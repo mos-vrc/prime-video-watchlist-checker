@@ -48,9 +48,13 @@
     </select>
   </div>
   <p id="surface-note"></p>
+  <!-- デバッグ表示の切り替え行: 提供版では無効化（開発のときだけ戻して使う）。
+       オンにすると「自動移動の記録」と「診断情報をコピー」がポップアップに現れ、
+       記録の保存も始まる。popup.js 側はこの行が無くても動くようガード済み。
   <div id="debug-row">
     <label><input type="checkbox" id="debug-toggle"> <span id="debug-label">デバッグ表示</span></label>
   </div>
+  -->
   <script src="popup.js"></script>
 </body>
 </html>
