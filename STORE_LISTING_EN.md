@@ -11,7 +11,7 @@ How to apply: in the Developer Dashboard's Store listing page, use the language 
 
 ## Summary (matches manifest `description` in the en locale)
 
-Scans your Amazon Prime Video watchlist and lists titles with unwatched episodes, judged by each card's hover play-button label.
+Scans your Amazon Prime Video watchlist and lists titles with unwatched episodes, judged by each card's hover play-button label. Titles you play are moved to Started automatically.
 
 ## Detailed description (draft)
 
@@ -29,6 +29,9 @@ Each title is classified by the play-button label shown when you hover over it:
 ・Anything else is shown separately as "Couldn't tell"
 
 (Japanese UI labels are supported too: 「〜の続きを観る」→ started, 「エピソード○を再生」→ unwatched.)
+
+■ Automatic move when you play a title
+When you play a title listed under "Has unwatched episodes", it moves to "Started / Resume" automatically — no re-check needed (only for playback in this browser; moved titles are marked "Played"). Trailers that autoplay do not trigger the move.
 
 ■ How to use
 1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
@@ -54,7 +57,7 @@ To scan the user's Amazon Prime Video watchlist and list the titles that have un
 
 - tabs: Used to find and focus the watchlist tab and to send it the scan-start message. Tab URLs are read only to identify the watchlist tab.
 - storage: Used to save the latest check results, the scan state, and the "Watchlist to open" choice from the popup inside the browser (chrome.storage.local), so the popup can show the previous results and the check can open the right site. Nothing is sent anywhere.
-- Host permissions (https://www.amazon.co.jp/gp/video/*, https://www.amazon.com/gp/video/*, https://www.primevideo.com/*): Used to run the content script only on the watchlist pages of the supported sites and read the hover play-button labels of title cards. The extension does not run on any other pages.
+- Host permissions (https://www.amazon.co.jp/gp/video/*, https://www.amazon.com/gp/video/*, https://www.primevideo.com/*): Used to run the content script on the Prime Video pages of the supported sites. On the watchlist page it reads the hover play-button labels of title cards; on detail and playback pages it detects when playback starts so a played title can be moved to "Started / Resume" in the stored results automatically. The extension does not run on any other sites.
 
 ## Data-use declarations (Privacy practices, for the dashboard)
 

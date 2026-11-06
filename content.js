@@ -894,6 +894,17 @@
     } catch (e) { return { done: false, found: false, title: null }; }
   }
 
+  // デバッグ機能（自動移動の記録・診断スナップショット）の有効/無効。
+  // 提供版では既定オフで、ポップアップ下部の「デバッグ表示」で切り替える
+  // （v1.3.0）。記録系だけを止めるもので、自動移動そのものは常に動く。
+  let pvDebugOn = false;
+  try {
+    chrome.storage.local.get('pvDebug').then((d) => { pvDebugOn = !!d.pvDebug; }).catch(() => {});
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.pvDebug) pvDebugOn = !!changes.pvDebug.newValue;
+    });
+  } catch (e) { /* noop */ }
+
   // 自動移動の成否・見送り理由を残す記録（ポップアップで見られる）。
   // 「動かない」報告のときに、何を見てどう判断したかを後から追えるように
   // するためのもの（v1.2.19）。最新30件だけを保持する。
@@ -901,6 +912,7 @@
   // ほぼ同時に起きた記録同士が上書きし合って片方が消えるため
   let pvLogChain = Promise.resolve();
   function logFlip(entry) {
+    if (!pvDebugOn) return Promise.resolve();
     pvLogChain = pvLogChain.then(async () => {
       try {
         const d = await chrome.storage.local.get('pvFlipLog');
@@ -1016,6 +1028,7 @@
   // 切り分けられるようにするためのもの。内容が変わったときだけ書く。
   let pvDiagSig = '';
   function writeDiagSnapshot() {
+    if (!pvDebugOn) return;
     try {
       const videos = [];
       for (const v of document.querySelectorAll('video')) {

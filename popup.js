@@ -7,6 +7,8 @@ const noteEl = document.getElementById('note');
 const resultsEl = document.getElementById('results');
 const metaEl = document.getElementById('meta');
 const flipLogEl = document.getElementById('fliplog');
+const debugToggle = document.getElementById('debug-toggle');
+document.getElementById('debug-label').textContent = msg('debugToggleLabel');
 const startBtn = document.getElementById('start');
 const surfaceSel = document.getElementById('surface');
 const surfaceNoteEl = document.getElementById('surface-note');
@@ -154,8 +156,30 @@ diagBtn.addEventListener('click', async () => {
   }
 });
 
+// デバッグ表示の切り替え（v1.3.0）: 記録と診断コピーはデバッグ機能として
+// 既定オフ。オンにするとポップアップ内に現れる
+function applyDebugVisibility(on, log) {
+  flipLogEl.style.display = on ? '' : 'none';
+  diagBtn.style.display = on ? '' : 'none';
+  if (on) renderFlipLog(log);
+}
+debugToggle.addEventListener('change', async () => {
+  const on = debugToggle.checked;
+  try { await chrome.storage.local.set({ pvDebug: on }); } catch (e) { /* noop */ }
+  if (on) {
+    try {
+      const d = await chrome.storage.local.get('pvFlipLog');
+      applyDebugVisibility(true, d.pvFlipLog);
+    } catch (e) { applyDebugVisibility(true, null); }
+  } else {
+    applyDebugVisibility(false, null);
+  }
+});
+
 function render(data) {
-  renderFlipLog(data.pvFlipLog);
+  const debugOn = !!data.pvDebug;
+  debugToggle.checked = debugOn;
+  applyDebugVisibility(debugOn, data.pvFlipLog);
   const scan = data.pvLastScan;
   const state = data.pvScanState;
   lastScanUrl = (scan && scan.url) || null;
@@ -228,4 +252,4 @@ function render(data) {
   metaEl.textContent = msg('popupLastCheck', [new Date(scan.at).toLocaleString(chrome.i18n.getUILanguage())]);
 }
 
-chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice', 'pvSurfacePref', 'pvFlipLog']).then(render).catch(() => {});
+chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice', 'pvSurfacePref', 'pvFlipLog', 'pvDebug']).then(render).catch(() => {});

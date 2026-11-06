@@ -26,6 +26,8 @@
   #diag-copy { width: 100%; padding: 7px; margin-top: 10px; font-size: 12px; font-weight: 700; border: 1px solid #3a4a58; border-radius: 8px; background: #22303c; color: #c7d5e0; cursor: pointer; }
   #diag-copy:hover { background: #2b3d4c; }
   #brand { font-size: 11px; color: #71879a; margin-top: 12px; white-space: nowrap; }
+  #debug-row { margin-top: 10px; font-size: 12px; color: #9db4c4; }
+  #debug-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -33,8 +35,8 @@
   <p id="note"></p>
   <div id="results"></div>
   <p id="meta"></p>
-  <div id="fliplog"></div>
-  <button id="diag-copy" type="button">診断情報をコピー</button>
+  <div id="fliplog" style="display:none"></div>
+  <button id="diag-copy" type="button" style="display:none">診断情報をコピー</button>
   <div id="brand">▶Prime Video ウォッチリスト新着チェッカー</div>
   <div id="surface-row">
     <label id="surface-label" for="surface">開くウォッチリスト</label>
@@ -46,6 +48,9 @@
     </select>
   </div>
   <p id="surface-note"></p>
+  <div id="debug-row">
+    <label><input type="checkbox" id="debug-toggle"> <span id="debug-label">デバッグ表示</span></label>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
