@@ -57,7 +57,7 @@
   const SETTLE_MS = 700;           // 反応はあったがDOMの変化がこの時間止まったら、ボタン無しと見切る
   const SETTLE_MIN_MS = 900;       // ただしホバー開始からこの時間までは見切らない
   const WEAK_SETTLE_MIN_MS = 1800; // 弱い文言（映画の「再生」/ "Play"）だけの場合は、本命ボタンの遅延描画に備えてこの時間までは確定しない
-  const BETWEEN_CARDS_MS = 60;     // 作品間の間隔
+  const BETWEEN_CARDS_MS = 40;     // 作品間の間隔（v1.2.15: 60→40）
   const SCROLL_WAIT_MS = 150;
   const MAX_SCROLL_ROUNDS = 120;   // 無限スクロールの安全上限
   const STABLE_ROUNDS_TO_STOP = 2; // 新規カードが出なくなってから止まるまでの回数
@@ -485,8 +485,17 @@
 
   async function checkCard(card) {
     const debug = { id: card.id, title: card.title, ctaText: '', foundIn: 'none', progressHint: null, snippet: '' };
-    card.el.scrollIntoView({ block: 'center', behavior: 'instant' });
-    await wait(60);
+    // すでに丸ごと画面内にあるカードは、寄せるスクロールと待ちを飛ばす
+    // （v1.2.15）。一部でもはみ出している場合は従来どおり中央へ寄せる。
+    let fullyVisible = false;
+    try {
+      const r = card.el.getBoundingClientRect();
+      fullyVisible = r.top >= 0 && r.left >= 0 && r.bottom <= window.innerHeight && r.right <= window.innerWidth;
+    } catch (e) { /* noop */ }
+    if (!fullyVisible) {
+      card.el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      await wait(60);
+    }
 
     const before = snapshotCtaElements();
     const hoverTargets = [card.el.querySelector('img'), card.el.querySelector('a'), card.el].filter(Boolean);
@@ -509,6 +518,13 @@
     const hoverStartedAt = Date.now();
     for (const t of hoverTargets) dispatchHover(t, true);
 
+    // 「最善の候補」が最後に変わった時刻。候補が安定しているかを見るために使う
+    // （v1.2.15）。ページ全体の DOM 変化は実ページだと絶え間なく起きるため、
+    // DOM の静けさだけを見切り条件にすると、ざわついたページでは弱い文言の
+    // 確定が最大時間まで引っ張られてしまう。候補そのものの安定で見切る。
+    let bestSig = null;
+    let bestSigChangedAt = 0;
+
     let found = null;
     try {
       const deadline = Date.now() + HOVER_WAIT_MS;
@@ -518,13 +534,16 @@
         const f = findCtaFor(card, before);
         if (f) {
           found = f;
+          const sigCls = f.cls || classifyCta(normalizeText(f.el.textContent));
+          const sig = sigCls.status + '|' + (sigCls.ctaText || '') + '|' + f.where;
+          if (sig !== bestSig) { bestSig = sig; bestSigChangedAt = Date.now(); }
           // 強い文言（エピソード系・Resume系）が見つかれば即確定する。
           // 弱い文言（映画の「再生」/ "Play" 単独）だけのうちは確定しない:
           // 初回スキャンなど描画が遅い状況では、本命ボタン（Resume等）が後から
           // 描画されるのに先に弱い文言で確定してしまう誤判定が起きるため、
           // DOMが落ち着くまで弱い文言は保留して待ち続ける（v1.2.1）。
           // 判定は探索時の文脈込みの結果（f.cls）を使う（第1話無料の判定など）。
-          if (!(f.cls || classifyCta(normalizeText(f.el.textContent))).weak) break;
+          if (!sigCls.weak) break;
         }
         const elapsed = Date.now() - hoverStartedAt;
         if (!found && domReactions === 0 && elapsed > NO_REACTION_MS) break;
@@ -534,6 +553,11 @@
         const weakOnly = found && (found.cls || classifyCta(normalizeText(found.el.textContent))).weak;
         const settleMin = weakOnly ? WEAK_SETTLE_MIN_MS : SETTLE_MIN_MS;
         if (domReactions > 0 && elapsed > settleMin && Date.now() - lastReactionAt > SETTLE_MS) break;
+        // 弱い文言のまま候補が安定している場合の見切り（v1.2.15）。
+        // 時間の下限（WEAK_SETTLE_MIN_MS）は従来どおり守るので、後から描画
+        // される本命ボタンを先に拾う余地は残る。本命が出れば候補が変わって
+        // 安定タイマーがリセットされる。
+        if (weakOnly && elapsed > WEAK_SETTLE_MIN_MS && bestSigChangedAt > 0 && Date.now() - bestSigChangedAt > SETTLE_MS) break;
         await wait(HOVER_POLL_MS);
       }
     } finally {
@@ -570,6 +594,15 @@
     panelHidden = false;
     scanResults = [];
     debugLog = [];
+    // 前回「未視聴あり」だった作品は先に巡回する（v1.2.15）。知りたい結果が
+    // 先に確定するので体感が速くなる。saveState が前回結果を上書きする前に読む。
+    const prevUnwatched = new Set();
+    try {
+      const d = await chrome.storage.local.get('pvLastScan');
+      if (d.pvLastScan && Array.isArray(d.pvLastScan.results)) {
+        for (const r of d.pvLastScan.results) if (r && r.status === 'unwatched') prevUnwatched.add(r.id);
+      }
+    } catch (e) { /* noop */ }
     ensurePanel();
     setPanelRunning(true);
     renderResults();
@@ -587,6 +620,8 @@
       while (rounds < MAX_SCROLL_ROUNDS && stableRounds < STABLE_ROUNDS_TO_STOP && !cancelRequested) {
         rounds++;
         const cards = findCards().filter((c) => !processed.has(c.id));
+        // 前回未視聴ありの作品を先に（同グループ内はページ順を維持）
+        cards.sort((a, b) => (prevUnwatched.has(a.id) ? 0 : 1) - (prevUnwatched.has(b.id) ? 0 : 1));
         if (cards.length === 0) {
           stableRounds++;
         } else {
