@@ -673,10 +673,121 @@
     }
   }
 
+  // ---------- 再生したら視聴済みに倒す（v1.2.16） ----------
+  // 「未視聴あり」の作品を再生したら、再チェックなしで保存結果を
+  // 「視聴済み側（続きを観る）」に倒す。対象は詳細ページでの再生と、
+  // ウォッチリストのプレビューからそのまま始まるページ内プレイヤー。
+  // 予告編の自動再生と区別するため、「直前10秒以内にクリックがある」または
+  // 「ミュートでない」再生だけを本人の再生とみなす。
+  // このために content script は Prime Video のページ全体に常駐する
+  // （巡回はウォッチリストでのみ行う）。
+  const PV_WL_RE = /^https:\/\/www\.primevideo\.com\/region\/[^/]+\/mystuff\/watchlist/;
+  function isWatchlistUrl(u) {
+    if (!u) return false;
+    return u.startsWith('https://www.amazon.co.jp/gp/video/mystuff/watchlist')
+      || u.startsWith('https://www.amazon.com/gp/video/mystuff/watchlist')
+      || PV_WL_RE.test(u);
+  }
+
+  let pvLastClickAt = 0;
+  let pvLastCardPress = { id: null, at: 0 };
+  document.addEventListener('pointerdown', (e) => {
+    pvLastClickAt = Date.now();
+    // 押された作品の特定（カード自体／プレビュー内のボタン等）
+    try {
+      let id = null;
+      const t = e.target;
+      const a = t && t.closest ? t.closest('a[href*="/detail/"]') : null;
+      if (a) id = extractTitleId(a.getAttribute('href'));
+      if (!id && t) {
+        // プレビューのような別要素の中で押された場合: 祖先を遡り、その範囲に
+        // 含まれる作品リンクが1作品だけならそれとみなす
+        let n = t;
+        for (let depth = 0; depth < 6 && n && !id; depth++) {
+          if (n.querySelectorAll) {
+            const ids = new Set();
+            for (const x of n.querySelectorAll('a[href*="/detail/"]')) {
+              const xid = extractTitleId(x.getAttribute('href'));
+              if (xid) ids.add(xid);
+            }
+            if (ids.size === 1) id = [...ids][0];
+          }
+          n = n.parentElement;
+        }
+      }
+      if (id) pvLastCardPress = { id, at: Date.now() };
+    } catch (err) { /* noop */ }
+  }, true);
+
+  let pvArmedDetailId = null;
+  function armPlaybackWatch() {
+    const id = extractTitleId(location.href);
+    if (id) pvArmedDetailId = id;
+  }
+
+  // 画面の大きな割合を占める video は本編プレイヤーとみなす。小さい
+  // プレビュー動画と区別するための条件（ページ内プレイヤー判定用）。
+  function isPlayerVideo(v) {
+    if (!v || v.tagName !== 'VIDEO') return false;
+    try {
+      if (document.fullscreenElement && document.fullscreenElement.contains(v)) return true;
+      const r = v.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      return (r.width * r.height) >= window.innerWidth * window.innerHeight * 0.35;
+    } catch (e) { return false; }
+  }
+
+  async function flipToWatched(id) {
+    try {
+      const d = await chrome.storage.local.get('pvLastScan');
+      const scan = d.pvLastScan;
+      if (!scan || !Array.isArray(scan.results)) return;
+      const r = scan.results.find((x) => x && x.id === id);
+      if (!r || r.status !== 'unwatched') return;
+      r.status = 'resume';
+      // at（最終チェック時刻）は据え置く。チェックした事実は変わらないため。
+      await chrome.storage.local.set({ pvLastScan: scan });
+    } catch (e) { /* noop */ }
+  }
+
+  function onVideoPlaying(e) {
+    const v = e.target;
+    if (!v || v.tagName !== 'VIDEO') return;
+    const deliberate = Date.now() - pvLastClickAt < 10 * 1000 || !v.muted;
+    if (!deliberate) return;
+    // ページ内プレイヤー（大きな video）: 直前に押されたカードの作品を倒す
+    if (isPlayerVideo(v) && pvLastCardPress.id && Date.now() - pvLastCardPress.at < 30 * 1000) {
+      flipToWatched(pvLastCardPress.id);
+    }
+    // 詳細ページ: URL の作品を倒す
+    if (pvArmedDetailId && extractTitleId(location.href) === pvArmedDetailId) {
+      const id = pvArmedDetailId;
+      pvArmedDetailId = null;
+      flipToWatched(id);
+    }
+  }
+  document.addEventListener('playing', onVideoPlaying, true);
+
+  // 別のタブで倒れた結果を、開いている結果パネルにも反映する
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.pvLastScan || scanning) return;
+      const scan = changes.pvLastScan.newValue;
+      if (!scan || !Array.isArray(scan.results)) return;
+      if (!document.getElementById(PANEL_ID)) return;
+      scanResults = scan.results;
+      renderResults();
+    });
+  } catch (e) { /* noop */ }
+
   // ---------- 起動・連携 ----------
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.type === 'pv-scan-start') {
+      if (!isWatchlistUrl(location.href)) {
+        sendResponse({ ok: false, error: 'not-watchlist' });
+        return false;
+      }
       startScan().then((r) => sendResponse(r)).catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true;
     }
@@ -690,7 +801,18 @@
   // タブを新規に開いた直後など、pending フラグが立っていたら自動開始する。
   // 初期描画は固定で待たず、最初のカードが見えるまでポーリングして
   // 描画が終わり次第すぐ始める（速いときは速く、遅いときは待つ）。
+  // あわせて、再生検知のために URL の変化（SPA 遷移）を見張って、
+  // 詳細ページに入るたびに作品 ID を控え直す。
   (async () => {
+    armPlaybackWatch();
+    let lastHref = location.href;
+    const checkHref = () => {
+      if (location.href !== lastHref) { lastHref = location.href; armPlaybackWatch(); }
+    };
+    setInterval(checkHref, 1000);
+    window.addEventListener('popstate', checkHref);
+
+    if (!isWatchlistUrl(location.href)) return; // 巡回の自動開始はウォッチリストだけ
     try {
       const data = await chrome.storage.local.get('pvPendingScan');
       const pending = data.pvPendingScan;
