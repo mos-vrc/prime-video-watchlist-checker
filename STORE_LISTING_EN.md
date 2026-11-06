@@ -11,7 +11,7 @@ How to apply: in the Developer Dashboard's Store listing page, use the language 
 
 ## Summary (matches manifest `description` in the en locale)
 
-Scans your Amazon Prime Video watchlist and lists titles with unwatched episodes, judged by each card's hover play-button label. Titles you play are moved to Started automatically.
+Scans your Prime Video watchlist for titles with unwatched episodes. Titles you play move to Started automatically.
 
 ## Detailed description (draft)
 
