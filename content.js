@@ -766,15 +766,20 @@
   // プレイヤー表示の中に出ている作品名から、未視聴ありの作品を特定する
   // （v1.2.18）。クリック経路で作品を特定できない場合の受け皿で、候補が
   // ちょうど1件のときだけ採用する。
+  // 実プレイヤーでは作品名などのオーバーレイは video の祖先ではなく
+  // プレイヤーコンテナ配下の兄弟側にあるため、video の大きさで止まらず、
+  // 画面サイズを超えない範囲でプレイヤーの外枠まで遡って読む（v1.2.19）。
   async function matchTitleInPlayer(v) {
     try {
       let root = v;
       let n = v;
       for (let i = 0; i < 6 && n && n.parentElement; i++) {
         n = n.parentElement;
-        root = n;
+        if (n === document.body || n === document.documentElement) break;
         const r = n.getBoundingClientRect();
-        if (r.width * r.height >= window.innerWidth * window.innerHeight * 0.5) break;
+        const ratio = (r.width * r.height) / (window.innerWidth * window.innerHeight);
+        if (ratio > 1.2) break;
+        root = n;
       }
       const text = normalizeText(root.textContent);
       if (!text) return null;
@@ -786,63 +791,105 @@
     } catch (e) { return null; }
   }
 
+  // flipToWatched の結果は {done, title} で返し、記録（pvFlipLog）に使う
   async function flipToWatched(id) {
     try {
       const d = await chrome.storage.local.get('pvLastScan');
       const scan = d.pvLastScan;
-      if (!scan || !Array.isArray(scan.results)) return;
+      if (!scan || !Array.isArray(scan.results)) return { done: false, title: null };
       const r = scan.results.find((x) => x && x.id === id);
-      if (!r || r.status !== 'unwatched') return;
+      if (!r) return { done: false, title: null };
+      if (r.status !== 'unwatched') return { done: false, title: r.title || null };
       r.status = 'resume';
       r.flipped = true; // 自動で移動した印。表示側は観測文言ではなく「再生済み」と出す（v1.2.17）
       // at（最終チェック時刻）は据え置く。チェックした事実は変わらないため。
       await chrome.storage.local.set({ pvLastScan: scan });
+      return { done: true, title: r.title || null };
+    } catch (e) { return { done: false, title: null }; }
+  }
+
+  // 自動移動の成否・見送り理由を残す記録（ポップアップで見られる）。
+  // 「動かない」報告のときに、何を見てどう判断したかを後から追えるように
+  // するためのもの（v1.2.19）。最新30件だけを保持する。
+  async function logFlip(entry) {
+    try {
+      const d = await chrome.storage.local.get('pvFlipLog');
+      const log = Array.isArray(d.pvFlipLog) ? d.pvFlipLog : [];
+      log.push({ t: Date.now(), ...entry });
+      await chrome.storage.local.set({ pvFlipLog: log.slice(-30) });
     } catch (e) { /* noop */ }
   }
 
-  function onVideoPlaying(e) {
-    const v = e.target;
-    if (!v || v.tagName !== 'VIDEO') return;
-    // 本人の操作かどうかの判定は2段階（v1.2.18で見直し）:
-    //  - 小さい video（詳細ページのヒーロー枠など）: 従来どおり「直前10秒
-    //    以内のクリック」か「ミュートでない」場合だけ。予告編の自動再生は
-    //    ページを開いてすぐ・無操作で始まるので、ここで弾ける。
-    //  - 大きい video（本編プレイヤー）: 再生ボタンを押してから広告や
-    //    読み込みで実際の再生開始が10秒を超えることがあるため、「この
-    //    ページで60秒以内に何か押した」でも本人の再生とみなす。
-    const clickedRecently = pvLastClickAt > 0 && Date.now() - pvLastClickAt < 10 * 1000;
-    const clickedThisPage = pvLastClickAt > 0 && Date.now() - pvLastClickAt < 60 * 1000;
+  const pvResolvedVideos = new WeakSet(); // 決着済みの video（再判定しない）
+  const pvLoggedVideos = new WeakSet();   // 見送り理由を記録済みの video
+
+  // 再生中の video に対する判定本体。'playing'/'play' イベントと、2.5秒
+  // ごとの見回り（poll）の両方から呼ばれる（v1.2.19で一本化）。
+  // 見回りが必要な理由: ページ遷移直後にミュートで自動開始した再生は、
+  // イベント時点では「本人の操作」と判定できず、その後に音を出す操作を
+  // しても 'playing' は二度と発火しないため、イベントだけでは拾えない。
+  function handlePlayingVideo(v, via) {
+    if (!v || v.tagName !== 'VIDEO' || pvResolvedVideos.has(v)) return;
+    const clickAge = pvLastClickAt > 0 ? Date.now() - pvLastClickAt : Infinity;
     const urlId = extractTitleId(location.href);
-    // 詳細ページ（URL に作品 ID が残っている間）: 従来どおりの厳しめ判定
-    if (pvArmedDetailId && urlId === pvArmedDetailId && (clickedRecently || !v.muted)) {
+    const big = isPlayerVideo(v) || videoContextCoverage(v) >= 0.5;
+    const base = { via, muted: !!v.muted, big };
+    const logSkipOnce = (reason) => {
+      if (pvLoggedVideos.has(v)) return;
+      pvLoggedVideos.add(v);
+      logFlip({ decision: 'skip', reason, ...base });
+    };
+    // 詳細ページ（URL に作品 ID が残っている間）: 厳しめ判定（従来どおり）。
+    // 小さい video（ヒーロー枠の予告編など）でも、ここだけは対象にする。
+    if (pvArmedDetailId && urlId === pvArmedDetailId && (clickAge < 10 * 1000 || !v.muted)) {
+      pvResolvedVideos.add(v);
       const id = pvArmedDetailId;
       pvArmedDetailId = null;
-      flipToWatched(id);
+      flipToWatched(id).then((res) => {
+        logFlip(res.done
+          ? { decision: 'flipped', title: res.title, ...base }
+          : { decision: 'skip', reason: 'not-unwatched', title: res.title, ...base });
+      });
       return;
     }
-    const big = isPlayerVideo(v) || videoContextCoverage(v) >= 0.5;
-    if (!big) return;
-    if (!(clickedThisPage || !v.muted)) return;
-    // ここから先は非同期で候補を解決する
+    if (!big) { logSkipOnce('small'); return; }
+    // 本編プレイヤー: 本人の操作らしいかどうか。イベント経由は60秒、
+    // 見回り経由は120秒まで遡る（音を出す操作が遅れて来る場合があるため）
+    const intentWindow = via === 'poll' ? 120 * 1000 : 60 * 1000;
+    if (!(clickAge < intentWindow || !v.muted)) { logSkipOnce('no-intent'); return; }
+    pvResolvedVideos.add(v);
     (async () => {
-      // プレイヤー表示の中の作品名で特定できれば、それが一番確実
-      const byText = await matchTitleInPlayer(v);
-      if (byText) { flipToWatched(byText); return; }
-      // 詳細ページから来た場合は、控えておいた作品 ID
-      // （プレイヤー画面では URL から作品 ID が消えることがあるため）
-      if (pvArmedDetailId) {
-        const id = pvArmedDetailId;
+      let candidate = await matchTitleInPlayer(v);
+      if (!candidate && pvArmedDetailId) {
+        candidate = pvArmedDetailId;
         pvArmedDetailId = null;
-        flipToWatched(id);
+      }
+      if (!candidate && pvLastCardPress.id && Date.now() - pvLastCardPress.at < 120 * 1000) {
+        candidate = pvLastCardPress.id;
+      }
+      if (!candidate) {
+        // ここで決着させない: 広告の再生中はプレイヤーに作品名が出ず、
+        // 本編が始まって初めて特定できることがあるため、見回りで再挑戦する
+        logSkipOnce('no-candidate');
+        pvResolvedVideos.delete(v);
         return;
       }
-      // 一覧で直前に押されたカード
-      if (pvLastCardPress.id && Date.now() - pvLastCardPress.at < 120 * 1000) {
-        flipToWatched(pvLastCardPress.id);
-      }
+      const res = await flipToWatched(candidate);
+      logFlip(res.done
+        ? { decision: 'flipped', title: res.title, ...base }
+        : { decision: 'skip', reason: 'not-unwatched', title: res.title, ...base });
     })();
   }
-  document.addEventListener('playing', onVideoPlaying, true);
+  document.addEventListener('playing', (e) => handlePlayingVideo(e.target, 'event'), true);
+  document.addEventListener('play', (e) => handlePlayingVideo(e.target, 'event'), true);
+  // 再生中なのにイベントで拾えなかった video の見回り（2.5秒ごと）
+  setInterval(() => {
+    try {
+      for (const v of document.querySelectorAll('video')) {
+        if (!v.paused && !v.ended && v.readyState >= 2) handlePlayingVideo(v, 'poll');
+      }
+    } catch (e) { /* noop */ }
+  }, 2500);
 
   // 別のタブで倒れた結果を、開いている結果パネルにも反映する
   try {

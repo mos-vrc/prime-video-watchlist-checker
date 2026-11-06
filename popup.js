@@ -6,6 +6,7 @@ const msg = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
 const noteEl = document.getElementById('note');
 const resultsEl = document.getElementById('results');
 const metaEl = document.getElementById('meta');
+const flipLogEl = document.getElementById('fliplog');
 const startBtn = document.getElementById('start');
 const surfaceSel = document.getElementById('surface');
 const surfaceNoteEl = document.getElementById('surface-note');
@@ -52,7 +53,45 @@ startBtn.addEventListener('click', async () => {
   }
 });
 
+// 自動移動の記録（pvFlipLog）の表示。動かなかったときに理由が分かるよう、
+// 最新8件を新しい順に並べる（v1.2.19）
+function renderFlipLog(log) {
+  flipLogEl.innerHTML = '';
+  const h = document.createElement('h2');
+  h.className = 'sub';
+  h.textContent = msg('flipLogHeading');
+  flipLogEl.appendChild(h);
+  const entries = Array.isArray(log) ? log.slice(-8).reverse() : [];
+  if (!entries.length) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = msg('flipLogEmpty');
+    flipLogEl.appendChild(p);
+    return;
+  }
+  const ul = document.createElement('ul');
+  for (const en of entries) {
+    const li = document.createElement('li');
+    const time = new Date(en.t).toLocaleTimeString(chrome.i18n.getUILanguage(), { hour: '2-digit', minute: '2-digit' });
+    const head = document.createElement('span');
+    head.textContent = en.title ? `${time} ${en.title}` : time;
+    li.appendChild(head);
+    const span = document.createElement('span');
+    span.className = 'cta';
+    if (en.decision === 'flipped') span.textContent = msg('flipLogFlipped');
+    else if (en.reason === 'small') span.textContent = msg('flipSkipSmall');
+    else if (en.reason === 'no-intent') span.textContent = msg('flipSkipNoIntent');
+    else if (en.reason === 'no-candidate') span.textContent = msg('flipSkipNoCandidate');
+    else if (en.reason === 'not-unwatched') span.textContent = msg('flipSkipNotUnwatched');
+    else span.textContent = en.reason || '';
+    li.appendChild(span);
+    ul.appendChild(li);
+  }
+  flipLogEl.appendChild(ul);
+}
+
 function render(data) {
+  renderFlipLog(data.pvFlipLog);
   const scan = data.pvLastScan;
   const state = data.pvScanState;
   lastScanUrl = (scan && scan.url) || null;
@@ -125,4 +164,4 @@ function render(data) {
   metaEl.textContent = msg('popupLastCheck', [new Date(scan.at).toLocaleString(chrome.i18n.getUILanguage())]);
 }
 
-chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice', 'pvSurfacePref']).then(render).catch(() => {});
+chrome.storage.local.get(['pvLastScan', 'pvScanState', 'pvNotice', 'pvSurfacePref', 'pvFlipLog']).then(render).catch(() => {});
