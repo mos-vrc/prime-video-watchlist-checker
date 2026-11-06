@@ -90,6 +90,68 @@ function renderFlipLog(log) {
   flipLogEl.appendChild(ul);
 }
 
+// 診断情報のコピー（v1.2.20）: 動かなかったときにユーザーがそのまま
+// チャットへ貼れる形で、版・ページの見え方・自動移動の記録・前回結果を
+// ひとまとめにしてクリップボードへ入れる
+const diagBtn = document.getElementById('diag-copy');
+diagBtn.textContent = msg('diagCopyButton');
+diagBtn.addEventListener('click', async () => {
+  try {
+    const data = await chrome.storage.local.get(['pvLastScan', 'pvFlipLog', 'pvDiagLast', 'pvScanState', 'pvNotice']);
+    const lines = [];
+    lines.push('=== Prime Video watchlist checker diagnostics ===');
+    lines.push('version: ' + chrome.runtime.getManifest().version);
+    lines.push('copiedAt: ' + new Date().toLocaleString('ja-JP'));
+    lines.push('uiLang: ' + chrome.i18n.getUILanguage());
+    lines.push('');
+    lines.push('--- last page snapshot ---');
+    if (data.pvDiagLast) {
+      lines.push('ageSec: ' + Math.round((Date.now() - data.pvDiagLast.t) / 1000));
+      lines.push(JSON.stringify(data.pvDiagLast, null, 1));
+    } else {
+      lines.push('(none)');
+    }
+    lines.push('');
+    lines.push('--- auto-move log (oldest first) ---');
+    const log = Array.isArray(data.pvFlipLog) ? data.pvFlipLog : [];
+    if (!log.length) lines.push('(empty)');
+    for (const e of log) lines.push(JSON.stringify(e));
+    lines.push('');
+    lines.push('--- last scan ---');
+    const scan = data.pvLastScan;
+    if (scan) {
+      lines.push('at: ' + new Date(scan.at).toLocaleString('ja-JP'));
+      lines.push('url: ' + scan.url);
+      for (const r of scan.results || []) {
+        lines.push([r.status, r.flipped ? 'flipped' : '-', JSON.stringify(r.title), JSON.stringify(r.ctaText || ''), r.id].join(' | '));
+      }
+    } else {
+      lines.push('(none)');
+    }
+    lines.push('');
+    lines.push('--- scan state / notice ---');
+    lines.push(JSON.stringify({ scanState: data.pvScanState || null, notice: data.pvNotice || null }));
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      noteEl.textContent = msg('diagCopied');
+    } catch (e2) {
+      let ta = document.getElementById('diag-text');
+      if (!ta) {
+        ta = document.createElement('textarea');
+        ta.id = 'diag-text';
+        ta.style.cssText = 'width:100%;height:140px;margin-top:8px;';
+        diagBtn.after(ta);
+      }
+      ta.value = text;
+      ta.select();
+      noteEl.textContent = msg('diagCopyFailed');
+    }
+  } catch (e) {
+    noteEl.textContent = msg('diagCopyFailed');
+  }
+});
+
 function render(data) {
   renderFlipLog(data.pvFlipLog);
   const scan = data.pvLastScan;

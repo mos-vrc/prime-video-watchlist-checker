@@ -889,7 +889,44 @@
         if (!v.paused && !v.ended && v.readyState >= 2) handlePlayingVideo(v, 'poll');
       }
     } catch (e) { /* noop */ }
+    writeDiagSnapshot();
   }, 2500);
+
+  // ---- 診断スナップショット（v1.2.20） ----
+  // 「このページでスクリプトが何を見ているか」を pvDiagLast に残す。
+  // ポップアップの「診断情報をコピー」で pvFlipLog と一緒に送ってもらい、
+  // 動かなかったときに (a) スクリプトがそもそも動いていない（タブが古い等）
+  // (b) 再生中の video が見えていない (c) 見えているが判定で弾いた、を
+  // 切り分けられるようにするためのもの。内容が変わったときだけ書く。
+  let pvDiagSig = '';
+  function writeDiagSnapshot() {
+    try {
+      const videos = [];
+      for (const v of document.querySelectorAll('video')) {
+        if (videos.length >= 6) break;
+        const r = v.getBoundingClientRect();
+        videos.push({
+          w: Math.round(r.width), h: Math.round(r.height),
+          muted: !!v.muted, paused: !!v.paused,
+          ct: Math.round(v.currentTime || 0),
+          big: isPlayerVideo(v) || videoContextCoverage(v) >= 0.5,
+        });
+      }
+      const snap = {
+        t: Date.now(),
+        url: location.href,
+        armed: pvArmedDetailId,
+        press: pvLastCardPress.id,
+        clickAgeSec: pvLastClickAt > 0 ? Math.round((Date.now() - pvLastClickAt) / 1000) : null,
+        iframes: document.querySelectorAll('iframe').length,
+        videos,
+      };
+      const sig = JSON.stringify({ ...snap, t: 0, clickAgeSec: snap.clickAgeSec == null ? null : Math.min(snap.clickAgeSec, 9999) });
+      if (sig === pvDiagSig) return;
+      pvDiagSig = sig;
+      chrome.storage.local.set({ pvDiagLast: snap }).catch(() => {});
+    } catch (e) { /* noop */ }
+  }
 
   // 別のタブで倒れた結果を、開いている結果パネルにも反映する
   try {
