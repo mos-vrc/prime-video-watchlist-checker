@@ -602,8 +602,20 @@
             await wait(BETWEEN_CARDS_MS);
           }
         }
+        const heightBefore = document.documentElement.scrollHeight;
+        const yBefore = window.scrollY;
         window.scrollBy(0, Math.floor(window.innerHeight * 0.9));
         await wait(SCROLL_WAIT_MS);
+        // 最下部に張り付いたままで高さも変わっていないなら、これ以上の
+        // 読み込みは来ないとみなして安定確認の空ラウンドを1回で打ち切る
+        // （v1.2.14）。従来は確認に2周回していて、最下部で約0.5秒の間が
+        // 空いていた。
+        if (cards.length === 0
+          && window.scrollY === yBefore
+          && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2
+          && document.documentElement.scrollHeight === heightBefore) {
+          stableRounds = STABLE_ROUNDS_TO_STOP;
+        }
       }
 
       // 巡回で一番下までスクロールしているので、終わったら最上部に戻す
