@@ -593,7 +593,6 @@
     // ポータルやカード内に出ている /detail/ リンクから拾って保存し、
     // 自動移動の照合で両方使えるようにする。関係ない作品の ID を拾わない
     // よう、リンクの種類が増えすぎる階層では打ち切る。
-    let altIds = new Set();
     const collectIds = (root, into) => {
       if (!root || !root.querySelectorAll) return;
       for (const a of root.querySelectorAll('a[href*="/detail/"]')) {
@@ -601,20 +600,49 @@
         if (xid) into.add(xid);
       }
     };
-    collectIds(card.el, altIds);
-    if (found) {
-      let n = found.el;
-      for (let depth = 0; depth < 8 && n && n !== document.body; depth++) {
-        const atLevel = new Set();
-        collectIds(n, atLevel);
-        const merged = new Set([...altIds, ...atLevel]);
-        if (merged.size > 4) break;
-        altIds = merged;
-        n = n.parentElement;
+    const collectAltIds = () => {
+      const set = new Set();
+      collectIds(card.el, set);
+      if (found) {
+        let n = found.el;
+        for (let depth = 0; depth < 8 && n && n !== document.body; depth++) {
+          const atLevel = new Set();
+          collectIds(n, atLevel);
+          const merged = new Set([...set, ...atLevel]);
+          if (merged.size > 4) break;
+          for (const x of merged) set.add(x);
+          n = n.parentElement;
+        }
+      }
+      // この作品へのリンクを含むポータル本体からも集める。ボタンがカード
+      // 内で見つかった場合でも、ポータル側のリンクを取りこぼさないため。
+      try {
+        for (const candEl of document.querySelectorAll('body > div, body > section, [data-testid], [role="dialog"], [class*="hover" i], [class*="popover" i], [class*="Hover" i]')) {
+          if (candEl.id === PANEL_ID || candEl.contains(card.el)) continue;
+          const ids = new Set();
+          collectIds(candEl, ids);
+          if (ids.has(card.id) && ids.size <= 8) for (const x of ids) set.add(x);
+        }
+      } catch (e) { /* noop */ }
+      set.delete(card.id);
+      return set;
+    };
+    let altIds = collectAltIds();
+    // 取りこぼし対策（v1.2.23）: ポータルのリンク類は再生ボタンより遅れて
+    // 描画されることがある。ページが冷えている初回チェックでは、ボタンが
+    // 見つかった時点では別 ID のリンクがまだ無く、取りこぼしが起きていた
+    // （温まった2回目のチェックでは最初から揃っているので取れる）。
+    // 空だった場合だけ、少し待って取り直す。
+    if (!altIds.size && !cancelRequested) {
+      const giveUp = Date.now() + 800;
+      while (Date.now() < giveUp && !cancelRequested) {
+        dispatchHover(hoverTargets[0], true);
+        await wait(120);
+        altIds = collectAltIds();
+        if (altIds.size) break;
       }
     }
-    altIds.delete(card.id);
-    if (altIds.size) result.altIds = [...altIds].slice(0, 4);
+    if (altIds.size) result.altIds = [...altIds].slice(0, 6);
 
     for (const t of hoverTargets) dispatchHover(t, false);
     debug.status = result.status;
