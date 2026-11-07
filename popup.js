@@ -237,20 +237,34 @@ function render(data) {
       a.textContent = r.title;
       a.addEventListener('click', async (ev) => {
         ev.preventDefault();
-        if (debugOn) {
-          // 遷移まわりの診断（v1.3.3）: ポップアップから飛んだことを残す
-          try {
-            const d = await chrome.storage.local.get('pvNavLog');
-            const nl = Array.isArray(d.pvNavLog) ? d.pvNavLog : [];
-            nl.push({ t: Date.now(), type: 'popup-click', href: r.href });
-            await chrome.storage.local.set({ pvNavLog: nl.slice(-40) });
-          } catch (e) { /* noop */ }
-        }
-        // 今開いているタブをそのまま作品ページへ遷移させる（新しいタブは開かない）
+        // 原則は今開いているタブをそのまま作品ページへ遷移させる。
+        // ただし再生中のタブを遷移させると、Prime 側の仕組みで再生中の作品へ
+        // 引き戻される（v1.3.3 の診断で判明）ため、再生中は新しいタブで開く（v1.3.4）
         try {
           const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
           if (tab && tab.id) {
-            await chrome.tabs.update(tab.id, { url: r.href });
+            let playing = false;
+            try {
+              const resp = await Promise.race([
+                chrome.tabs.sendMessage(tab.id, { type: 'pv-playing-query' }),
+                new Promise((res) => setTimeout(() => res(null), 300)),
+              ]);
+              playing = !!(resp && resp.playing);
+            } catch (e) { /* ページ側が応答しなければ従来どおり同じタブで */ }
+            if (debugOn) {
+              // 遷移まわりの診断（v1.3.3）: ポップアップから飛んだことを残す
+              try {
+                const d = await chrome.storage.local.get('pvNavLog');
+                const nl = Array.isArray(d.pvNavLog) ? d.pvNavLog : [];
+                nl.push({ t: Date.now(), type: 'popup-click', href: r.href, mode: playing ? 'new-tab' : 'same-tab' });
+                await chrome.storage.local.set({ pvNavLog: nl.slice(-40) });
+              } catch (e) { /* noop */ }
+            }
+            if (playing) {
+              await chrome.tabs.create({ url: r.href });
+            } else {
+              await chrome.tabs.update(tab.id, { url: r.href });
+            }
             window.close();
             return;
           }

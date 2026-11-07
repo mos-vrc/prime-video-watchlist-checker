@@ -400,11 +400,20 @@
       if (!a || !a.href) return;
       ev.preventDefault();
       ev.stopPropagation();
+      // 再生中に同じタブを作品ページへ遷移させると、Prime 側の仕組みで
+      // 再生中の作品へ引き戻される（v1.3.3 の診断で判明: タブは実際に遷移するが、
+      // checkpoint 経由で再生中作品のページが読み込まれ直す）。そのため
+      // 再生中は新しいタブで開く（v1.3.4）
+      if (anyPlayingVideo()) {
+        logNav({ type: 'panel-nav', mode: 'new-tab', href: a.href, url: location.href, hist: history.length });
+        window.open(a.href, '_blank');
+        return;
+      }
       // 記録の書き込みが終わってから遷移する（先に遷移すると、書き込みの
       // 途中で文書が破棄されて記録が消えるため）。詰まっても遷移はする
       let navigated = false;
       const go = () => { if (!navigated) { navigated = true; location.href = a.href; } };
-      logNav({ type: 'panel-nav', href: a.href, url: location.href, hist: history.length }).then(go);
+      logNav({ type: 'panel-nav', mode: 'same-tab', href: a.href, url: location.href, hist: history.length }).then(go);
       setTimeout(go, 400);
     }, true);
     // 診断ログボタンは当面非表示（ユーザー要望）。保存機能自体は残してあり、必要になったら表示に戻す
@@ -1176,6 +1185,11 @@
     }
     if (msg && msg.type === 'pv-scan-status') {
       sendResponse({ running: scanning, count: scanResults.length });
+      return false;
+    }
+    if (msg && msg.type === 'pv-playing-query') {
+      // ポップアップからの問い合わせ: このタブで動画が再生中かどうか（v1.3.4）
+      sendResponse({ playing: anyPlayingVideo() });
       return false;
     }
     return false;
