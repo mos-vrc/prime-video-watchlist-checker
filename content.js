@@ -388,6 +388,20 @@
     document.body.appendChild(panel);
     panel.querySelector('.pv-close').addEventListener('click', () => closePanel());
     panel.querySelector('.pv-cancel').addEventListener('click', () => { cancelRequested = true; });
+    // パネル内の作品リンクは、必ず通常のページ遷移にする（v1.3.2）。
+    // Prime 側はリンクのクリックを画面内遷移（SPA）として処理することがあり、
+    // 動画の再生中にそれが起きると、一瞬クリックした作品の詳細が表示された
+    // あと再生中の作品の詳細へ引き戻されてしまう（実ページで発生）。
+    // 捕捉フェーズで先に受けて伝播を止め、自分で遷移させることで、
+    // ページ側のクリック処理に横取りされないようにする
+    panel.addEventListener('click', (ev) => {
+      const t = ev.target;
+      const a = t && t.closest ? t.closest('a') : null;
+      if (!a || !a.href) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      location.href = a.href;
+    }, true);
     // 診断ログボタンは当面非表示（ユーザー要望）。保存機能自体は残してあり、必要になったら表示に戻す
     panel.querySelector('.pv-log').addEventListener('click', downloadDebugLog);
     setPanelRunning(false);
