@@ -888,6 +888,15 @@
       if (r.status !== 'unwatched') return { done: false, found: true, title: r.title || null };
       r.status = 'resume';
       r.flipped = true; // 自動で移動した印。表示側は観測文言ではなく「再生済み」と出す（v1.2.17）
+      // 移動した作品は結果の先頭へ並べ替える（v1.3.1）: 表示側はグループ内で
+      // 保存順に並ぶため、これで「視聴済み側」の先頭に来る。今日観た作品が
+      // まとまって見えるようにするのが目的で、次のチェックで保存し直されれば
+      // 通常の順番に戻る。複数観た場合は新しいものほど前に来る。
+      const idx = scan.results.indexOf(r);
+      if (idx > 0) {
+        scan.results.splice(idx, 1);
+        scan.results.unshift(r);
+      }
       // at（最終チェック時刻）は据え置く。チェックした事実は変わらないため。
       await chrome.storage.local.set({ pvLastScan: scan });
       return { done: true, found: true, title: r.title || null };
