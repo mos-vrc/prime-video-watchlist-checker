@@ -15,6 +15,8 @@ Scans your Prime Video watchlist for titles with unwatched episodes. Titles you 
 
 ## Detailed description (draft)
 
+Note: for pasting into the dashboard, use the plain-text copy `STORE_LISTING_EN.txt` (this section's body verbatim) — copying from rendered Markdown mangles the line breaks.
+
 This extension automatically checks the titles on your Amazon Prime Video watchlist and lists the ones that have episodes you haven't watched yet.
 
 On Prime Video, a watchlist doesn't tell you when a new episode arrives — you only find out by opening each title. This extension scans your watchlist for you and judges each title's viewing state from the label of the play button shown on hover.

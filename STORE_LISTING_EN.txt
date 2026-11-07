@@ -1,0 +1,33 @@
+This extension automatically checks the titles on your Amazon Prime Video watchlist and lists the ones that have episodes you haven't watched yet.
+
+On Prime Video, a watchlist doesn't tell you when a new episode arrives — you only find out by opening each title. This extension scans your watchlist for you and judges each title's viewing state from the label of the play button shown on hover.
+
+Note: Only the Japanese and English Prime Video interfaces are supported. Titles cannot be classified when the interface is set to another language.
+
+■ How it decides
+Each title is classified by the play-button label shown when you hover over it:
+・"Resume" (e.g. "Resume S3 E5") → already started
+・"Play Episode …" / "Play S3 E5" → has unwatched episodes
+・For movies: "Play" → not watched yet, "Resume" → already started (movies are mixed into the same groups)
+・Anything else is shown separately as "Couldn't tell"
+
+(Japanese UI labels are supported too: 「〜の続きを観る」→ started, 「エピソード○を再生」→ unwatched.)
+
+■ Automatic move when you play a title
+When you play a title listed under "Has unwatched episodes", it moves to "Started / Resume" automatically — no re-check needed (only for playback in this browser; moved titles are marked "Played"). Trailers that autoplay do not trigger the move. If you open a title from the popup or the panel while a video is playing, it opens in a new tab (navigating the playing tab would bounce back to the playing title due to Prime Video's behavior).
+
+■ How to use
+1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
+2. The watchlist tab opens and the scan starts automatically (about 1 second per title). You can choose which site to open with the "Watchlist to open" selector at the bottom of the popup (default: Auto = the site you checked last time)
+3. Results appear in a panel on the page and in the extension popup, grouped into "Has unwatched episodes", "Started / Resume", and "Couldn't tell"
+4. Click a title to go straight to its page
+
+■ Privacy
+Results are stored only inside your browser and are never sent to any server. The extension does not collect account information or viewing history. It uses your browser's existing signed-in session and never reads your ID, password, or cookies.
+
+■ Notes
+・Works with Prime Video on amazon.co.jp, amazon.com, and primevideo.com
+・Only the Japanese and English interface languages are supported
+・This is an unofficial tool and is not affiliated with Amazon.com, Inc. or its affiliates
+・If you stopped an episode partway, the button keeps saying "Resume", so a newer episode beyond it cannot be detected
+・If Prime Video changes its page layout, the extension may stop working until updated
