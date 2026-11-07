@@ -400,7 +400,12 @@
       if (!a || !a.href) return;
       ev.preventDefault();
       ev.stopPropagation();
-      location.href = a.href;
+      // 記録の書き込みが終わってから遷移する（先に遷移すると、書き込みの
+      // 途中で文書が破棄されて記録が消えるため）。詰まっても遷移はする
+      let navigated = false;
+      const go = () => { if (!navigated) { navigated = true; location.href = a.href; } };
+      logNav({ type: 'panel-nav', href: a.href, url: location.href, hist: history.length }).then(go);
+      setTimeout(go, 400);
     }, true);
     // 診断ログボタンは当面非表示（ユーザー要望）。保存機能自体は残してあり、必要になったら表示に戻す
     panel.querySelector('.pv-log').addEventListener('click', downloadDebugLog);
@@ -921,8 +926,9 @@
   // 提供版では既定オフで、ポップアップ下部の「デバッグ表示」で切り替える
   // （v1.3.0）。記録系だけを止めるもので、自動移動そのものは常に動く。
   let pvDebugOn = false;
+  let pvDebugReady = Promise.resolve();
   try {
-    chrome.storage.local.get('pvDebug').then((d) => { pvDebugOn = !!d.pvDebug; }).catch(() => {});
+    pvDebugReady = chrome.storage.local.get('pvDebug').then((d) => { pvDebugOn = !!d.pvDebug; }).catch(() => {});
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes.pvDebug) pvDebugOn = !!changes.pvDebug.newValue;
     });
@@ -946,6 +952,70 @@
     });
     return pvLogChain;
   }
+
+  // 遷移まわりの記録（v1.3.3、診断用）: 再生中にパネルのリンクを押すと
+  // クリックした作品を一瞬表示して再生中の作品へ引き戻される問題の切り分け用。
+  // 「クリックがどこまで届いたか」「URL がどう変わったか」「本物のページ
+  // 遷移（文書の読み込み）が起きたか」を時系列で残す。デバッグ時のみ。
+  let pvNavChain = Promise.resolve();
+  function logNav(entry) {
+    // pvDebug の読み込み完了を待ってから判定する（読み込み直後の
+    // doc-load が、フラグ未確定のまま捨てられるのを防ぐ）
+    pvNavChain = pvNavChain.then(() => pvDebugReady).then(async () => {
+      if (!pvDebugOn) return;
+      try {
+        const d = await chrome.storage.local.get('pvNavLog');
+        const log = Array.isArray(d.pvNavLog) ? d.pvNavLog : [];
+        log.push({ t: Date.now(), ...entry });
+        await chrome.storage.local.set({ pvNavLog: log.slice(-40) });
+      } catch (e) { /* noop */ }
+    });
+    return pvNavChain;
+  }
+  function anyPlayingVideo() {
+    try {
+      return [...document.querySelectorAll('video')].some((v) => !v.paused && (v.clientWidth || 0) >= 200);
+    } catch (e) { return false; }
+  }
+  // クリックの観測（文書の捕捉フェーズ。干渉はしない）:
+  // パネル内かどうかと、押されたリンク先を残す
+  let pvNavFastTimer = null;
+  let pvNavLastUrl = location.href;
+  function pvNavWatchUrl() {
+    if (location.href !== pvNavLastUrl) {
+      pvNavLastUrl = location.href;
+      logNav({ type: 'url-change', url: location.href, hist: history.length });
+    }
+  }
+  try {
+    document.addEventListener('click', (ev) => {
+      if (!pvDebugOn) return;
+      const t = ev.target;
+      const a = t && t.closest ? t.closest('a') : null;
+      if (!a || !a.href) return;
+      logNav({
+        type: 'click',
+        insidePanel: !!(t.closest && t.closest('#' + PANEL_ID)),
+        href: a.href,
+        url: location.href,
+        hist: history.length,
+        playing: anyPlayingVideo(),
+      });
+      // クリック直後は URL の変化を細かく追う（一瞬だけの表示も拾うため）
+      pvNavLastUrl = location.href;
+      if (pvNavFastTimer) clearInterval(pvNavFastTimer);
+      const until = Date.now() + 3000;
+      pvNavFastTimer = setInterval(() => {
+        pvNavWatchUrl();
+        if (Date.now() > until) { clearInterval(pvNavFastTimer); pvNavFastTimer = null; }
+      }, 100);
+    }, true);
+    window.addEventListener('popstate', () => {
+      logNav({ type: 'popstate', url: location.href, hist: history.length });
+    });
+    window.addEventListener('beforeunload', () => { logNav({ type: 'beforeunload', url: location.href }); });
+    window.addEventListener('pagehide', () => { logNav({ type: 'pagehide', url: location.href }); });
+  } catch (e) { /* noop */ }
 
   const pvResolvedVideos = new WeakSet(); // 決着済みの video（再判定しない）
   const pvLoggedVideos = new WeakSet();   // 見送り理由を記録済みの video
@@ -1118,9 +1188,14 @@
   // 詳細ページに入るたびに作品 ID を控え直す。
   (async () => {
     armPlaybackWatch();
+    logNav({ type: 'doc-load', url: location.href, referrer: document.referrer || '', hist: history.length });
     let lastHref = location.href;
     const checkHref = () => {
-      if (location.href !== lastHref) { lastHref = location.href; armPlaybackWatch(); }
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        logNav({ type: 'url-change', url: location.href, hist: history.length });
+        armPlaybackWatch();
+      }
     };
     setInterval(checkHref, 1000);
     window.addEventListener('popstate', checkHref);

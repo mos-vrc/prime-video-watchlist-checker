@@ -102,7 +102,7 @@ const diagBtn = document.getElementById('diag-copy');
 diagBtn.textContent = msg('diagCopyButton');
 diagBtn.addEventListener('click', async () => {
   try {
-    const data = await chrome.storage.local.get(['pvLastScan', 'pvFlipLog', 'pvDiagLast', 'pvScanState', 'pvNotice']);
+    const data = await chrome.storage.local.get(['pvLastScan', 'pvFlipLog', 'pvNavLog', 'pvDiagLast', 'pvScanState', 'pvNotice']);
     const lines = [];
     lines.push('=== Prime Video watchlist checker diagnostics ===');
     lines.push('version: ' + chrome.runtime.getManifest().version);
@@ -121,6 +121,11 @@ diagBtn.addEventListener('click', async () => {
     const log = Array.isArray(data.pvFlipLog) ? data.pvFlipLog : [];
     if (!log.length) lines.push('(empty)');
     for (const e of log) lines.push(JSON.stringify(e));
+    lines.push('');
+    lines.push('--- nav log (oldest first) ---');
+    const navLog = Array.isArray(data.pvNavLog) ? data.pvNavLog : [];
+    if (!navLog.length) lines.push('(empty)');
+    for (const e of navLog) lines.push(JSON.stringify(e));
     lines.push('');
     lines.push('--- last scan ---');
     const scan = data.pvLastScan;
@@ -232,6 +237,15 @@ function render(data) {
       a.textContent = r.title;
       a.addEventListener('click', async (ev) => {
         ev.preventDefault();
+        if (debugOn) {
+          // 遷移まわりの診断（v1.3.3）: ポップアップから飛んだことを残す
+          try {
+            const d = await chrome.storage.local.get('pvNavLog');
+            const nl = Array.isArray(d.pvNavLog) ? d.pvNavLog : [];
+            nl.push({ t: Date.now(), type: 'popup-click', href: r.href });
+            await chrome.storage.local.set({ pvNavLog: nl.slice(-40) });
+          } catch (e) { /* noop */ }
+        }
         // 今開いているタブをそのまま作品ページへ遷移させる（新しいタブは開かない）
         try {
           const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
