@@ -31,7 +31,7 @@ Each title is classified by the play-button label shown when you hover over it:
 (Japanese UI labels are supported too: 「〜の続きを観る」→ started, 「エピソード○を再生」→ unwatched.)
 
 ■ Automatic move when you play a title
-When you play a title listed under "Has unwatched episodes", it moves to "Started / Resume" automatically — no re-check needed (only for playback in this browser; moved titles are marked "Played"). Trailers that autoplay do not trigger the move.
+When you play a title listed under "Has unwatched episodes", it moves to "Started / Resume" automatically — no re-check needed (only for playback in this browser; moved titles are marked "Played"). Trailers that autoplay do not trigger the move. If you open a title from the popup or the panel while a video is playing, it opens in a new tab (navigating the playing tab would bounce back to the playing title due to Prime Video's behavior).
 
 ■ How to use
 1. Sign in to a supported site (amazon.co.jp, amazon.com, or primevideo.com) and press "Check my watchlist" from the extension icon
